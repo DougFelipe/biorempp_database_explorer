@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Download, X } from 'lucide-react';
 import {
   getCompounds,
@@ -9,11 +9,70 @@ import {
   exportCompoundsToCSV,
   exportCompoundsToJSON,
 } from '../services/api';
+import { getCompoundSummaryAsset } from '../services/assets';
 import type { CompoundSummary, CompoundFilters } from '../types/database';
+import { CompoundVisualizations } from './CompoundVisualizations';
 import { Pagination } from './Pagination';
 
 interface CompoundExplorerProps {
   onCompoundSelect: (cpd: string) => void;
+}
+
+function containsReference(compound: CompoundSummary, referenceAg: string) {
+  if (!compound.reference_ag) {
+    return false;
+  }
+  return compound.reference_ag
+    .split(';')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .includes(referenceAg);
+}
+
+function applyCompoundFilters(compounds: CompoundSummary[], filters: CompoundFilters) {
+  return compounds.filter((compound) => {
+    if (filters.compoundclass && compound.compoundclass !== filters.compoundclass) {
+      return false;
+    }
+    if (filters.reference_ag && !containsReference(compound, filters.reference_ag)) {
+      return false;
+    }
+    if (filters.pathway && !compound.pathways.includes(filters.pathway)) {
+      return false;
+    }
+    if (filters.gene && !compound.genes.includes(filters.gene)) {
+      return false;
+    }
+    if (filters.toxicity_score_min !== undefined && compound.toxicity_score < filters.toxicity_score_min) {
+      return false;
+    }
+    if (filters.toxicity_score_max !== undefined && compound.toxicity_score > filters.toxicity_score_max) {
+      return false;
+    }
+    if (filters.ko_count_min !== undefined && compound.ko_count < filters.ko_count_min) {
+      return false;
+    }
+    if (filters.ko_count_max !== undefined && compound.ko_count > filters.ko_count_max) {
+      return false;
+    }
+    if (filters.gene_count_min !== undefined && compound.gene_count < filters.gene_count_min) {
+      return false;
+    }
+    if (filters.gene_count_max !== undefined && compound.gene_count > filters.gene_count_max) {
+      return false;
+    }
+
+    if (filters.search) {
+      const search = filters.search.toLowerCase();
+      const name = (compound.compoundname || '').toLowerCase();
+      const cpd = compound.cpd.toLowerCase();
+      if (!name.includes(search) && !cpd.includes(search)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 }
 
 export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
@@ -28,12 +87,16 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
   const [referenceAGs, setReferenceAGs] = useState<string[]>([]);
   const [genes, setGenes] = useState<string[]>([]);
   const [pathways, setPathways] = useState<string[]>([]);
+  const [assetCompounds, setAssetCompounds] = useState<CompoundSummary[]>([]);
+  const [assetLoading, setAssetLoading] = useState(true);
+  const [assetError, setAssetError] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<CompoundFilters>({});
   const [searchInput, setSearchInput] = useState('');
 
   useEffect(() => {
     loadMetadata();
+    loadAssetCompounds();
   }, []);
 
   useEffect(() => {
@@ -68,6 +131,20 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
       console.error('Error loading compounds:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadAssetCompounds() {
+    setAssetLoading(true);
+    try {
+      const rows = await getCompoundSummaryAsset();
+      setAssetCompounds(rows);
+      setAssetError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      setAssetError(`Unable to load static visualization assets: ${message}`);
+    } finally {
+      setAssetLoading(false);
     }
   }
 
@@ -113,6 +190,10 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
   }
 
   const activeFilterCount = Object.keys(filters).length;
+  const filteredAssetCompounds = useMemo(
+    () => applyCompoundFilters(assetCompounds, filters),
+    [assetCompounds, filters]
+  );
 
   return (
     <div className="space-y-6">
@@ -313,6 +394,12 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
           </button>
         )}
       </div>
+
+      <CompoundVisualizations
+        compounds={filteredAssetCompounds}
+        loading={assetLoading}
+        error={assetError}
+      />
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
