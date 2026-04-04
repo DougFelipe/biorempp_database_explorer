@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+node_modules
+dist
+data/biorempp.sqlite
+data/biorempp.sqlite-shm
+data/biorempp.sqlite-wal
+npm-debug.log*
+supabase
+.archive/
