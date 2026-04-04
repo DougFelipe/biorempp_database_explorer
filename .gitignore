@@ -25,3 +25,4 @@ dist-ssr
 data/biorempp.sqlite
 data/biorempp.sqlite-shm
 data/biorempp.sqlite-wal
+data/assets/

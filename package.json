@@ -13,11 +13,14 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "ingest:sqlite": "node scripts/ingest-sqlite.mjs",
+    "export:assets": "node scripts/export-assets.mjs",
+    "export:assets:full": "node scripts/export-assets.mjs --with-full",
     "ingest:data": "npm run ingest:sqlite",
     "start": "node server/index.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
+    "d3": "^7.9.0",
     "express": "^5.2.1",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
@@ -25,6 +28,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@types/d3": "^7.4.3",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
