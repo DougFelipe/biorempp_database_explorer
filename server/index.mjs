@@ -1,0 +1,583 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import express from 'express';
+import Database from 'better-sqlite3';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '..');
+
+const PORT = Number(process.env.PORT || 3000);
+const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH || path.join(projectRoot, 'data', 'biorempp.sqlite');
+
+if (!fs.existsSync(SQLITE_DB_PATH)) {
+  throw new Error(`SQLite database not found at ${SQLITE_DB_PATH}. Run "npm run ingest:sqlite" first.`);
+}
+
+const db = new Database(SQLITE_DB_PATH, {
+  readonly: true,
+  fileMustExist: true,
+});
+
+const app = express();
+app.use(express.json());
+
+function parsePositiveInt(value, fallback) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseNumber(value) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getPagination(query) {
+  const page = Math.max(1, parsePositiveInt(query.page, 1));
+  const pageSize = Math.min(200, Math.max(1, parsePositiveInt(query.pageSize, 50)));
+  const offset = (page - 1) * pageSize;
+  return { page, pageSize, offset };
+}
+
+function likeValue(value) {
+  return `%${value}%`;
+}
+
+function toPaginatedResponse(data, total, page, pageSize) {
+  return {
+    data,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  };
+}
+
+function parseJsonObject(value) {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+  } catch {
+    return {};
+  }
+  return {};
+}
+
+function parseJsonArray(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+function readDistinctStrings(sql, params = []) {
+  const rows = db.prepare(sql).all(...params);
+  return rows
+    .map((row) => row.value)
+    .filter((value) => value !== null && value !== undefined && value !== '');
+}
+
+app.get('/api/compounds', (req, res, next) => {
+  try {
+    const { page, pageSize, offset } = getPagination(req.query);
+    const where = [];
+    const params = [];
+
+    if (req.query.compoundclass) {
+      where.push('cs.compoundclass = ?');
+      params.push(String(req.query.compoundclass));
+    }
+    if (req.query.reference_ag) {
+      where.push(`
+        EXISTS (
+          SELECT 1
+          FROM compound_reference_map crm
+          WHERE crm.cpd = cs.cpd
+            AND crm.reference_ag = ?
+        )
+      `);
+      params.push(String(req.query.reference_ag));
+    }
+    if (req.query.pathway) {
+      where.push(`
+        EXISTS (
+          SELECT 1
+          FROM compound_pathway_map cpm
+          WHERE cpm.cpd = cs.cpd
+            AND cpm.pathway = ?
+        )
+      `);
+      params.push(String(req.query.pathway));
+    }
+    if (req.query.gene) {
+      where.push(`
+        EXISTS (
+          SELECT 1
+          FROM compound_gene_map cgm
+          WHERE cgm.cpd = cs.cpd
+            AND cgm.genesymbol = ?
+        )
+      `);
+      params.push(String(req.query.gene));
+    }
+
+    const toxicityMin = parseNumber(req.query.toxicity_score_min);
+    if (toxicityMin !== undefined) {
+      where.push('cs.toxicity_score >= ?');
+      params.push(toxicityMin);
+    }
+    const toxicityMax = parseNumber(req.query.toxicity_score_max);
+    if (toxicityMax !== undefined) {
+      where.push('cs.toxicity_score <= ?');
+      params.push(toxicityMax);
+    }
+
+    const koCountMin = parseNumber(req.query.ko_count_min);
+    if (koCountMin !== undefined) {
+      where.push('cs.ko_count >= ?');
+      params.push(koCountMin);
+    }
+    const koCountMax = parseNumber(req.query.ko_count_max);
+    if (koCountMax !== undefined) {
+      where.push('cs.ko_count <= ?');
+      params.push(koCountMax);
+    }
+
+    const geneCountMin = parseNumber(req.query.gene_count_min);
+    if (geneCountMin !== undefined) {
+      where.push('cs.gene_count >= ?');
+      params.push(geneCountMin);
+    }
+    const geneCountMax = parseNumber(req.query.gene_count_max);
+    if (geneCountMax !== undefined) {
+      where.push('cs.gene_count <= ?');
+      params.push(geneCountMax);
+    }
+
+    if (req.query.search) {
+      const search = likeValue(String(req.query.search));
+      where.push('(cs.compoundname LIKE ? COLLATE NOCASE OR cs.cpd LIKE ? COLLATE NOCASE)');
+      params.push(search, search);
+    }
+
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+    const total = db
+      .prepare(`SELECT COUNT(*) AS total FROM compound_summary cs ${whereSql}`)
+      .get(...params).total;
+
+    const rows = db
+      .prepare(`
+        SELECT
+          cs.cpd,
+          cs.compoundname,
+          cs.compoundclass,
+          cs.reference_ag,
+          cs.ko_count,
+          cs.gene_count,
+          cs.pathway_count,
+          cs.toxicity_score,
+          cs.smiles,
+          cs.genes,
+          cs.pathways,
+          cs.updated_at
+        FROM compound_summary cs
+        ${whereSql}
+        ORDER BY cs.gene_count DESC, cs.cpd ASC
+        LIMIT ? OFFSET ?
+      `)
+      .all(...params, pageSize, offset)
+      .map((row) => ({
+        ...row,
+        genes: parseJsonArray(row.genes),
+        pathways: parseJsonArray(row.pathways),
+      }));
+
+    res.json(toPaginatedResponse(rows, total, page, pageSize));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/compounds/:cpd', (req, res, next) => {
+  try {
+    const row = db
+      .prepare(`
+        SELECT
+          cpd,
+          compoundname,
+          compoundclass,
+          reference_ag,
+          ko_count,
+          gene_count,
+          pathway_count,
+          toxicity_score,
+          smiles,
+          genes,
+          pathways,
+          updated_at
+        FROM compound_summary
+        WHERE cpd = ?
+        LIMIT 1
+      `)
+      .get(req.params.cpd);
+
+    if (!row) {
+      res.json(null);
+      return;
+    }
+
+    res.json({
+      ...row,
+      genes: parseJsonArray(row.genes),
+      pathways: parseJsonArray(row.pathways),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/compounds/:cpd/details', (req, res, next) => {
+  try {
+    const rows = db
+      .prepare(`
+        SELECT
+          id,
+          ko,
+          genesymbol,
+          genename,
+          enzyme_activity,
+          ec,
+          reaction,
+          cpd,
+          compoundname,
+          compoundclass,
+          reference_ag,
+          pathway_hadeg,
+          pathway_kegg,
+          compound_pathway,
+          smiles,
+          chebi,
+          toxicity_labels,
+          toxicity_values,
+          created_at
+        FROM integrated_table
+        WHERE cpd = ?
+        ORDER BY genesymbol ASC, ko ASC
+      `)
+      .all(req.params.cpd)
+      .map((row) => ({
+        ...row,
+        toxicity_labels: parseJsonObject(row.toxicity_labels),
+        toxicity_values: parseJsonObject(row.toxicity_values),
+      }));
+
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/genes', (req, res, next) => {
+  try {
+    const { page, pageSize, offset } = getPagination(req.query);
+    const where = [];
+    const params = [];
+
+    if (req.query.genesymbol) {
+      where.push('genesymbol = ?');
+      params.push(String(req.query.genesymbol));
+    }
+
+    const compoundMin = parseNumber(req.query.compound_count_min);
+    if (compoundMin !== undefined) {
+      where.push('compound_count >= ?');
+      params.push(compoundMin);
+    }
+
+    const compoundMax = parseNumber(req.query.compound_count_max);
+    if (compoundMax !== undefined) {
+      where.push('compound_count <= ?');
+      params.push(compoundMax);
+    }
+
+    if (req.query.search) {
+      const search = likeValue(String(req.query.search));
+      where.push('(genesymbol LIKE ? COLLATE NOCASE OR genename LIKE ? COLLATE NOCASE OR ko LIKE ? COLLATE NOCASE)');
+      params.push(search, search, search);
+    }
+
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const total = db
+      .prepare(`SELECT COUNT(*) AS total FROM gene_summary ${whereSql}`)
+      .get(...params).total;
+
+    const rows = db
+      .prepare(`
+        SELECT
+          ko,
+          genesymbol,
+          genename,
+          compound_count,
+          pathway_count,
+          enzyme_activities,
+          updated_at
+        FROM gene_summary
+        ${whereSql}
+        ORDER BY compound_count DESC, ko ASC
+        LIMIT ? OFFSET ?
+      `)
+      .all(...params, pageSize, offset)
+      .map((row) => ({
+        ...row,
+        enzyme_activities: parseJsonArray(row.enzyme_activities),
+      }));
+
+    res.json(toPaginatedResponse(rows, total, page, pageSize));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/pathways', (req, res, next) => {
+  try {
+    const { page, pageSize, offset } = getPagination(req.query);
+    const where = [];
+    const params = [];
+
+    if (req.query.source) {
+      where.push('source = ?');
+      params.push(String(req.query.source));
+    }
+
+    if (req.query.search) {
+      where.push('pathway LIKE ? COLLATE NOCASE');
+      params.push(likeValue(String(req.query.search)));
+    }
+
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const total = db
+      .prepare(`SELECT COUNT(*) AS total FROM pathway_summary ${whereSql}`)
+      .get(...params).total;
+
+    const rows = db
+      .prepare(`
+        SELECT
+          pathway,
+          source,
+          compound_count,
+          gene_count,
+          updated_at
+        FROM pathway_summary
+        ${whereSql}
+        ORDER BY compound_count DESC, pathway ASC
+        LIMIT ? OFFSET ?
+      `)
+      .all(...params, pageSize, offset);
+
+    res.json(toPaginatedResponse(rows, total, page, pageSize));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/toxicity', (req, res, next) => {
+  try {
+    const { page, pageSize, offset } = getPagination(req.query);
+    const where = [];
+    const params = [];
+
+    if (req.query.endpoint) {
+      where.push('endpoint = ?');
+      params.push(String(req.query.endpoint));
+    }
+
+    if (req.query.label) {
+      where.push('label = ?');
+      params.push(String(req.query.label));
+    }
+
+    if (req.query.compoundclass) {
+      where.push('compoundclass = ?');
+      params.push(String(req.query.compoundclass));
+    }
+
+    const valueMin = parseNumber(req.query.value_min);
+    if (valueMin !== undefined) {
+      where.push('value >= ?');
+      params.push(valueMin);
+    }
+
+    const valueMax = parseNumber(req.query.value_max);
+    if (valueMax !== undefined) {
+      where.push('value <= ?');
+      params.push(valueMax);
+    }
+
+    if (req.query.search) {
+      const search = likeValue(String(req.query.search));
+      where.push('(compoundname LIKE ? COLLATE NOCASE OR cpd LIKE ? COLLATE NOCASE)');
+      params.push(search, search);
+    }
+
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const total = db
+      .prepare(`SELECT COUNT(*) AS total FROM toxicity_endpoint ${whereSql}`)
+      .get(...params).total;
+
+    const rows = db
+      .prepare(`
+        SELECT
+          cpd,
+          compoundname,
+          compoundclass,
+          endpoint,
+          label,
+          value,
+          updated_at
+        FROM toxicity_endpoint
+        ${whereSql}
+        ORDER BY (value IS NULL) ASC, value DESC, compoundname ASC, cpd ASC
+        LIMIT ? OFFSET ?
+      `)
+      .all(...params, pageSize, offset);
+
+    res.json(toPaginatedResponse(rows, total, page, pageSize));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/meta/compound-classes', (_req, res, next) => {
+  try {
+    const values = readDistinctStrings(`
+      SELECT DISTINCT compoundclass AS value
+      FROM compound_summary
+      WHERE compoundclass IS NOT NULL
+      ORDER BY compoundclass
+    `);
+    res.json(values);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/meta/reference-ags', (_req, res, next) => {
+  try {
+    const values = readDistinctStrings(`
+      SELECT DISTINCT reference_ag AS value
+      FROM compound_reference_map
+      WHERE reference_ag IS NOT NULL
+      ORDER BY reference_ag
+    `);
+    res.json(values);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/meta/genes', (_req, res, next) => {
+  try {
+    const values = readDistinctStrings(`
+      SELECT DISTINCT genesymbol AS value
+      FROM gene_summary
+      WHERE genesymbol IS NOT NULL
+      ORDER BY genesymbol
+    `);
+    res.json(values);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/meta/pathways', (_req, res, next) => {
+  try {
+    const values = readDistinctStrings(`
+      SELECT DISTINCT pathway AS value
+      FROM pathway_summary
+      WHERE pathway IS NOT NULL
+      ORDER BY pathway
+    `);
+    res.json(values);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/meta/toxicity/endpoints', (_req, res, next) => {
+  try {
+    const values = readDistinctStrings(`
+      SELECT DISTINCT endpoint AS value
+      FROM toxicity_endpoint
+      WHERE endpoint IS NOT NULL
+      ORDER BY endpoint
+    `);
+    res.json(values);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/meta/toxicity/labels', (req, res, next) => {
+  try {
+    const params = [];
+    let where = 'label IS NOT NULL';
+    if (req.query.endpoint) {
+      where += ' AND endpoint = ?';
+      params.push(String(req.query.endpoint));
+    }
+    const values = readDistinctStrings(
+      `
+        SELECT DISTINCT label AS value
+        FROM toxicity_endpoint
+        WHERE ${where}
+        ORDER BY label
+      `,
+      params
+    );
+    res.json(values);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
+
+const distPath = path.join(projectRoot, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  res.status(500).json({
+    error: error instanceof Error ? error.message : 'Internal server error',
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`BioRemPP monolith listening on http://0.0.0.0:${PORT}`);
+  console.log(`SQLite DB: ${SQLITE_DB_PATH}`);
+});
