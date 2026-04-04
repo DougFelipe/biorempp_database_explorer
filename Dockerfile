@@ -8,6 +8,7 @@ RUN npm ci
 COPY . .
 
 RUN npm run ingest:sqlite
+RUN npm run export:assets
 RUN npm run build
 
 
@@ -16,6 +17,8 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV SQLITE_DB_PATH=/app/data/biorempp.sqlite
+ENV ASSETS_VERSION=v0.0.2
+ENV ASSETS_ROOT_PATH=/app/data/assets
 
 WORKDIR /app
 
