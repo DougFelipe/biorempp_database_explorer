@@ -30,13 +30,16 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
   const [toxicityRows, setToxicityRows] = useState<ToxicityEndpoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [genesLoading, setGenesLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'genes' | 'pathways' | 'toxicity'>('genes');
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'genes' | 'pathways' | 'toxicity' | 'metadata'>('genes');
   const [genePage, setGenePage] = useState(1);
   const [geneTotalPages, setGeneTotalPages] = useState(1);
   const [genePageSize] = useState(25);
 
   useEffect(() => {
     setGenePage(1);
+    setActiveTab('genes');
+    setMetadata(null);
   }, [cpd]);
 
   useEffect(() => {
@@ -47,18 +50,23 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
     loadGenesPage();
   }, [cpd, genePage]);
 
+  useEffect(() => {
+    if (activeTab !== 'metadata' || metadata) {
+      return;
+    }
+    loadMetadata();
+  }, [activeTab, cpd, metadata]);
+
   async function loadCompoundContext() {
     setLoading(true);
     try {
-      const [summaryData, metadataData, pathwaysData, toxicityData] = await Promise.all([
+      const [summaryData, pathwaysData, toxicityData] = await Promise.all([
         getCompoundById(cpd),
-        getCompoundMetadata(cpd),
         getCompoundPathways(cpd, { page: 1, pageSize: 1000 }),
         getCompoundToxicityProfile(cpd, { page: 1, pageSize: 200 }),
       ]);
 
       setSummary(summaryData);
-      setMetadata(metadataData);
       setPathwayRows(pathwaysData.data);
       setToxicityRows(toxicityData.data);
     } catch (error) {
@@ -78,6 +86,18 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
       console.error('Error loading compound genes:', error);
     } finally {
       setGenesLoading(false);
+    }
+  }
+
+  async function loadMetadata() {
+    setMetadataLoading(true);
+    try {
+      const data = await getCompoundMetadata(cpd);
+      setMetadata(data);
+    } catch (error) {
+      console.error('Error loading compound metadata:', error);
+    } finally {
+      setMetadataLoading(false);
     }
   }
 
@@ -179,8 +199,6 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
           </div>
         </div>
 
-        {metadata && <CompoundMetadataPanel metadata={metadata} />}
-
         <div className="border-b border-gray-200">
           <div className="flex gap-4 px-6">
             <button
@@ -212,6 +230,16 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
               }`}
             >
               Toxicity Profile ({toxicityRows.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('metadata')}
+              className={`py-3 px-4 border-b-2 font-medium text-sm ${
+                activeTab === 'metadata'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Metadata
             </button>
           </div>
         </div>
@@ -328,6 +356,18 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
                 </table>
               ) : (
                 <p className="text-gray-500 text-center py-4">No toxicity data available</p>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'metadata' && (
+            <div className="space-y-6">
+              {metadataLoading ? (
+                <p className="text-gray-500 text-center py-4">Loading metadata...</p>
+              ) : metadata ? (
+                <CompoundMetadataPanel metadata={metadata} summary={summary} toxicityRows={toxicityRows} />
+              ) : (
+                <p className="text-gray-500 text-center py-4">Metadata unavailable for this compound.</p>
               )}
             </div>
           )}
