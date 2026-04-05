@@ -1,78 +1,19 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Download, X } from 'lucide-react';
 import {
   getCompounds,
   getUniqueCompoundClasses,
   getUniqueReferenceAGs,
   getUniqueGenes,
-  getUniquePathways,
+  getPathwayOptions,
   exportCompoundsToCSV,
   exportCompoundsToJSON,
 } from '../services/api';
-import { getCompoundSummaryAsset } from '../services/assets';
-import type { CompoundSummary, CompoundFilters } from '../types/database';
-import { CompoundVisualizations } from './CompoundVisualizations';
+import type { CompoundSummary, CompoundFilters, PathwayOption } from '../types/database';
 import { Pagination } from './Pagination';
 
 interface CompoundExplorerProps {
   onCompoundSelect: (cpd: string) => void;
-}
-
-function containsReference(compound: CompoundSummary, referenceAg: string) {
-  if (!compound.reference_ag) {
-    return false;
-  }
-  return compound.reference_ag
-    .split(';')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .includes(referenceAg);
-}
-
-function applyCompoundFilters(compounds: CompoundSummary[], filters: CompoundFilters) {
-  return compounds.filter((compound) => {
-    if (filters.compoundclass && compound.compoundclass !== filters.compoundclass) {
-      return false;
-    }
-    if (filters.reference_ag && !containsReference(compound, filters.reference_ag)) {
-      return false;
-    }
-    if (filters.pathway && !compound.pathways.includes(filters.pathway)) {
-      return false;
-    }
-    if (filters.gene && !compound.genes.includes(filters.gene)) {
-      return false;
-    }
-    if (filters.toxicity_score_min !== undefined && compound.toxicity_score < filters.toxicity_score_min) {
-      return false;
-    }
-    if (filters.toxicity_score_max !== undefined && compound.toxicity_score > filters.toxicity_score_max) {
-      return false;
-    }
-    if (filters.ko_count_min !== undefined && compound.ko_count < filters.ko_count_min) {
-      return false;
-    }
-    if (filters.ko_count_max !== undefined && compound.ko_count > filters.ko_count_max) {
-      return false;
-    }
-    if (filters.gene_count_min !== undefined && compound.gene_count < filters.gene_count_min) {
-      return false;
-    }
-    if (filters.gene_count_max !== undefined && compound.gene_count > filters.gene_count_max) {
-      return false;
-    }
-
-    if (filters.search) {
-      const search = filters.search.toLowerCase();
-      const name = (compound.compoundname || '').toLowerCase();
-      const cpd = compound.cpd.toLowerCase();
-      if (!name.includes(search) && !cpd.includes(search)) {
-        return false;
-      }
-    }
-
-    return true;
-  });
 }
 
 export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
@@ -86,17 +27,12 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
   const [compoundClasses, setCompoundClasses] = useState<string[]>([]);
   const [referenceAGs, setReferenceAGs] = useState<string[]>([]);
   const [genes, setGenes] = useState<string[]>([]);
-  const [pathways, setPathways] = useState<string[]>([]);
-  const [assetCompounds, setAssetCompounds] = useState<CompoundSummary[]>([]);
-  const [assetLoading, setAssetLoading] = useState(true);
-  const [assetError, setAssetError] = useState<string | null>(null);
-
+  const [pathwayOptions, setPathwayOptions] = useState<PathwayOption[]>([]);
   const [filters, setFilters] = useState<CompoundFilters>({});
   const [searchInput, setSearchInput] = useState('');
 
   useEffect(() => {
     loadMetadata();
-    loadAssetCompounds();
   }, []);
 
   useEffect(() => {
@@ -109,12 +45,12 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
         getUniqueCompoundClasses(),
         getUniqueReferenceAGs(),
         getUniqueGenes(),
-        getUniquePathways(),
+        getPathwayOptions(),
       ]);
       setCompoundClasses(classes);
       setReferenceAGs(refs);
       setGenes(availableGenes);
-      setPathways(availablePathways);
+      setPathwayOptions(availablePathways);
     } catch (error) {
       console.error('Error loading metadata:', error);
     }
@@ -134,20 +70,6 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
     }
   }
 
-  async function loadAssetCompounds() {
-    setAssetLoading(true);
-    try {
-      const rows = await getCompoundSummaryAsset();
-      setAssetCompounds(rows);
-      setAssetError(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      setAssetError(`Unable to load static visualization assets: ${message}`);
-    } finally {
-      setAssetLoading(false);
-    }
-  }
-
   function handleFilterChange(key: keyof CompoundFilters, value: string | number | undefined) {
     setFilters(prev => {
       const newFilters = { ...prev };
@@ -160,6 +82,18 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
     });
     setCurrentPage(1);
   }
+
+  const availablePathwaySources = [...new Set(pathwayOptions.map((item) => item.source))]
+    .sort((a, b) => a.localeCompare(b));
+  const pathwaysBySource = availablePathwaySources.map((source) => ({
+    source,
+    pathways: [
+      ...new Set(pathwayOptions.filter((item) => item.source === source).map((item) => item.pathway)),
+    ].sort((a, b) => a.localeCompare(b)),
+  }));
+  const visiblePathways = filters.pathway_source
+    ? pathwaysBySource.find((entry) => entry.source === filters.pathway_source)?.pathways ?? []
+    : [];
 
   function handleSearch() {
     handleFilterChange('search', searchInput || undefined);
@@ -190,10 +124,6 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
   }
 
   const activeFilterCount = Object.keys(filters).length;
-  const filteredAssetCompounds = useMemo(
-    () => applyCompoundFilters(assetCompounds, filters),
-    [assetCompounds, filters]
-  );
 
   return (
     <div className="space-y-6">
@@ -257,6 +187,32 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Pathway Source
+            </label>
+            <select
+              value={filters.pathway_source || ''}
+              onChange={(e) => {
+                const source = e.target.value || undefined;
+                handleFilterChange('pathway_source', source);
+                if (
+                  filters.pathway &&
+                  source &&
+                  !pathwayOptions.some((item) => item.source === source && item.pathway === filters.pathway)
+                ) {
+                  handleFilterChange('pathway', undefined);
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Sources</option>
+              {availablePathwaySources.map((source) => (
+                <option key={source} value={source}>{source}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Pathway
             </label>
             <select
@@ -265,10 +221,25 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Pathways</option>
-              {pathways.map((pathway) => (
-                <option key={pathway} value={pathway}>{pathway}</option>
-              ))}
+              {filters.pathway_source ? (
+                visiblePathways.map((pathway) => (
+                  <option key={pathway} value={pathway}>{pathway}</option>
+                ))
+              ) : (
+                pathwaysBySource.map((group) => (
+                  <optgroup key={group.source} label={group.source}>
+                    {group.pathways.map((pathway) => (
+                      <option key={`${group.source}-${pathway}`} value={pathway}>
+                        {pathway}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              )}
             </select>
+            {!filters.pathway_source && (
+              <p className="mt-1 text-xs text-gray-500">Tip: select Pathway Source first to simplify this list.</p>
+            )}
           </div>
 
           <div>
@@ -355,33 +326,6 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Min Toxicity Score
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={filters.toxicity_score_min || ''}
-              onChange={(e) => handleFilterChange('toxicity_score_min', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Min"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Max Toxicity Score
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={filters.toxicity_score_max || ''}
-              onChange={(e) => handleFilterChange('toxicity_score_max', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Max"
-            />
-          </div>
         </div>
 
         {activeFilterCount > 0 && (
@@ -394,12 +338,6 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
           </button>
         )}
       </div>
-
-      <CompoundVisualizations
-        compounds={filteredAssetCompounds}
-        loading={assetLoading}
-        error={assetError}
-      />
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
@@ -440,7 +378,7 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
                     Pathway Count
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Toxicity Score
+                    Toxicity Risk Mean
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Reference
@@ -473,7 +411,7 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
                       {compound.pathway_count}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {compound.toxicity_score.toFixed(2)}
+                      {compound.toxicity_risk_mean == null ? '-' : compound.toxicity_risk_mean.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {compound.reference_ag || '-'}
