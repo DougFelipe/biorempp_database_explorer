@@ -1,9 +1,16 @@
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import type { CompoundMetadata, CompoundMetadataSource } from '../types/database';
+import type {
+  CompoundMetadata,
+  CompoundMetadataSource,
+  CompoundSummary,
+  ToxicityEndpoint,
+} from '../types/database';
 
 interface CompoundMetadataPanelProps {
   metadata: CompoundMetadata;
+  summary: CompoundSummary;
+  toxicityRows: ToxicityEndpoint[];
 }
 
 function sourceBadgeClass(color: CompoundMetadataSource['color']) {
@@ -30,133 +37,105 @@ function formatDate(value: string | null) {
   return date.toLocaleString();
 }
 
-function ListChips({ values }: { values: string[] }) {
-  if (values.length === 0) {
-    return <span className="text-gray-500">-</span>;
-  }
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {values.map((value) => (
-        <span key={value} className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
-          {value}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function MetadataRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="grid grid-cols-[180px_minmax(0,1fr)] gap-3 py-2 border-b border-gray-100 last:border-b-0">
+    <div className="grid grid-cols-[170px_minmax(0,1fr)] gap-3 py-2 border-b border-gray-100 last:border-b-0">
       <p className="text-sm text-gray-500">{label}</p>
       <div className="text-sm text-gray-900 break-words">{value}</div>
     </div>
   );
 }
 
+function MetricCard({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
+      <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-lg font-semibold text-gray-900 mt-1">{value}</p>
+    </div>
+  );
+}
+
 export const CompoundMetadataPanel = memo(function CompoundMetadataPanel({
   metadata,
+  summary,
+  toxicityRows,
 }: CompoundMetadataPanelProps) {
   const sources = useMemo(
     () => [...metadata.data_sources].sort((a, b) => a.name.localeCompare(b.name)),
     [metadata.data_sources]
   );
 
+  const toxicityLabelCount = useMemo(
+    () => new Set(toxicityRows.map((row) => row.label).filter(Boolean)).size,
+    [toxicityRows]
+  );
+
   return (
-    <div className="px-6 py-4 bg-white border-b border-gray-200 space-y-3">
-      <h3 className="text-base font-semibold text-gray-900">Structured Metadata</h3>
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <h3 className="text-base font-semibold text-gray-900 mb-2">Identifiers & Interoperability</h3>
+        <MetadataRow label="Compound ID" value={metadata.identifiers.cpd || '-'} />
+        <MetadataRow label="Compound Name" value={metadata.identifiers.compound_name || '-'} />
+        <MetadataRow label="Compound Class" value={metadata.identifiers.compound_class || '-'} />
+        <MetadataRow label="KEGG Compound ID" value={metadata.cross_references.kegg_compound_id || '-'} />
+        <MetadataRow
+          label="ChEBI"
+          value={metadata.cross_references.chebi || metadata.identifiers.chebi_id || '-'}
+        />
+        <MetadataRow label="SMILES" value={metadata.identifiers.smiles || '-'} />
+        <MetadataRow
+          label="Data Sources"
+          value={
+            <div className="flex flex-wrap gap-2">
+              {sources.length > 0 ? (
+                sources.map((source) => (
+                  <span
+                    key={source.name}
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${sourceBadgeClass(source.color)}`}
+                    title={source.role}
+                  >
+                    {source.name}
+                  </span>
+                ))
+              ) : (
+                <span className="text-gray-500">-</span>
+              )}
+            </div>
+          }
+        />
+      </div>
 
-      <details open className="rounded-lg border border-gray-200 bg-gray-50">
-        <summary className="px-4 py-2 cursor-pointer font-medium text-sm text-gray-800">Identifiers</summary>
-        <div className="px-4 pb-3">
-          <MetadataRow label="Compound ID" value={metadata.identifiers.cpd || '-'} />
-          <MetadataRow label="Compound Name" value={metadata.identifiers.compound_name || '-'} />
-          <MetadataRow label="Compound Class" value={metadata.identifiers.compound_class || '-'} />
-          <MetadataRow label="KO IDs" value={<ListChips values={metadata.identifiers.ko_ids} />} />
-          <MetadataRow label="Gene Symbols" value={<ListChips values={metadata.identifiers.gene_symbols} />} />
-          <MetadataRow label="Gene Names" value={<ListChips values={metadata.identifiers.gene_names} />} />
-          <MetadataRow label="ChEBI ID" value={metadata.identifiers.chebi_id || '-'} />
-          <MetadataRow label="SMILES" value={metadata.identifiers.smiles || '-'} />
-        </div>
-      </details>
-
-      <details className="rounded-lg border border-gray-200 bg-gray-50">
-        <summary className="px-4 py-2 cursor-pointer font-medium text-sm text-gray-800">
-          Functional Annotation
-        </summary>
-        <div className="px-4 pb-3">
-          <MetadataRow
-            label="Enzyme Activity"
-            value={<ListChips values={metadata.functional_annotation.enzyme_activity} />}
-          />
-          <MetadataRow label="EC Number" value={<ListChips values={metadata.functional_annotation.ec_numbers} />} />
-          <MetadataRow
-            label="Pathways (HADEG)"
-            value={<ListChips values={metadata.functional_annotation.pathways_hadeg} />}
-          />
-          <MetadataRow
-            label="Pathways (KEGG)"
-            value={<ListChips values={metadata.functional_annotation.pathways_kegg} />}
-          />
-          <MetadataRow
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <h3 className="text-base font-semibold text-gray-900 mb-3">Quantitative Overview</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <MetricCard label="KO Count" value={summary.ko_count} />
+          <MetricCard label="Gene Count" value={summary.gene_count} />
+          <MetricCard label="Pathway Count" value={summary.pathway_count} />
+          <MetricCard label="EC Count" value={metadata.functional_annotation.ec_numbers.length} />
+          <MetricCard label="Enzyme Activity Count" value={metadata.functional_annotation.enzyme_activity.length} />
+          <MetricCard label="HADEG Pathways" value={metadata.functional_annotation.pathways_hadeg.length} />
+          <MetricCard label="KEGG Pathways" value={metadata.functional_annotation.pathways_kegg.length} />
+          <MetricCard
             label="Compound Pathway Class"
-            value={<ListChips values={metadata.functional_annotation.compound_pathway_class} />}
+            value={metadata.functional_annotation.compound_pathway_class.length}
           />
-          <MetadataRow label="Reaction Count" value={metadata.functional_annotation.reaction_count} />
+          <MetricCard label="Reaction Count" value={metadata.functional_annotation.reaction_count} />
+          <MetricCard label="Toxicity Endpoints" value={toxicityRows.length} />
+          <MetricCard label="Toxicity Labels" value={toxicityLabelCount} />
+          <MetricCard label="Cross-Ref Coverage" value={metadata.data_quality.cross_references_coverage} />
         </div>
-      </details>
+      </div>
 
-      <details open className="rounded-lg border border-gray-200 bg-gray-50">
-        <summary className="px-4 py-2 cursor-pointer font-medium text-sm text-gray-800">Chemical Information</summary>
-        <div className="px-4 pb-3">
-          <MetadataRow label="Compound Name" value={metadata.chemical_information.compound_name || '-'} />
-          <MetadataRow label="Compound Class" value={metadata.chemical_information.compound_class || '-'} />
-          <MetadataRow label="SMILES" value={metadata.chemical_information.smiles || '-'} />
-          <MetadataRow label="ChEBI" value={metadata.chemical_information.chebi || '-'} />
-        </div>
-      </details>
-
-      <details className="rounded-lg border border-gray-200 bg-gray-50">
-        <summary className="px-4 py-2 cursor-pointer font-medium text-sm text-gray-800">Data Sources</summary>
-        <div className="px-4 pb-3 space-y-2">
-          {sources.length === 0 ? (
-            <p className="text-sm text-gray-500">-</p>
-          ) : (
-            sources.map((source) => (
-              <div key={source.name} className="flex items-center gap-2">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${sourceBadgeClass(source.color)}`}>
-                  {source.name}
-                </span>
-                <span className="text-sm text-gray-700">{source.role}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </details>
-
-      <details className="rounded-lg border border-gray-200 bg-gray-50">
-        <summary className="px-4 py-2 cursor-pointer font-medium text-sm text-gray-800">Provenance</summary>
-        <div className="px-4 pb-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-2">Provenance</h3>
           <MetadataRow label="Version" value={metadata.provenance.version || '-'} />
           <MetadataRow label="Last Updated" value={formatDate(metadata.provenance.last_updated)} />
           <MetadataRow label="Pipeline" value={metadata.provenance.pipeline || '-'} />
         </div>
-      </details>
 
-      <details className="rounded-lg border border-gray-200 bg-gray-50">
-        <summary className="px-4 py-2 cursor-pointer font-medium text-sm text-gray-800">Cross-References</summary>
-        <div className="px-4 pb-3">
-          <MetadataRow label="KEGG Compound ID" value={metadata.cross_references.kegg_compound_id || '-'} />
-          <MetadataRow label="ChEBI" value={metadata.cross_references.chebi || '-'} />
-          <MetadataRow label="EC Numbers" value={<ListChips values={metadata.cross_references.ec_numbers} />} />
-          <MetadataRow label="Reaction Count" value={metadata.cross_references.reaction_count} />
-        </div>
-      </details>
-
-      <details className="rounded-lg border border-gray-200 bg-gray-50">
-        <summary className="px-4 py-2 cursor-pointer font-medium text-sm text-gray-800">Data Quality</summary>
-        <div className="px-4 pb-3">
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-2">Data Quality</h3>
           <MetadataRow
             label="KO Format"
             value={
@@ -184,7 +163,8 @@ export const CompoundMetadataPanel = memo(function CompoundMetadataPanel({
           <MetadataRow label="Completeness" value={`${metadata.data_quality.completeness_pct}%`} />
           <MetadataRow label="Cross-References Coverage" value={metadata.data_quality.cross_references_coverage} />
         </div>
-      </details>
+      </div>
     </div>
   );
 });
+
