@@ -1,4 +1,5 @@
 import type {
+  CompoundOverviewResponse,
   CompoundSummary,
   CompoundMetadata,
   GeneSummary,
@@ -56,6 +57,18 @@ export async function getCompoundById(cpd: string): Promise<CompoundSummary | nu
 
 export async function getCompoundMetadata(cpd: string): Promise<CompoundMetadata> {
   return fetchJson(`/api/compounds/${encodeURIComponent(cpd)}/metadata`);
+}
+
+export async function getCompoundOverview(
+  cpd: string,
+  options: { top_ko?: number; top_pathways?: number } = {}
+): Promise<CompoundOverviewResponse> {
+  return fetchJson(
+    `/api/compounds/${encodeURIComponent(cpd)}/overview${buildQuery({
+      top_ko: options.top_ko,
+      top_pathways: options.top_pathways,
+    })}`
+  );
 }
 
 export async function getCompoundDetails(cpd: string): Promise<IntegratedData[]> {

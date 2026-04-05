@@ -39,6 +39,64 @@ export interface CompoundSummary {
   updated_at: string;
 }
 
+export interface CompoundOverviewSummary {
+  cpd: string;
+  compoundname: string | null;
+  compoundclass: string | null;
+  reference_count: number;
+  ko_count: number;
+  gene_count: number;
+  pathway_count: number;
+  toxicity_risk_mean: number | null;
+  high_risk_endpoint_count: number;
+}
+
+export interface KoBarDatum {
+  ko: string;
+  count: number;
+}
+
+export interface PathwayTopDatum {
+  source: string;
+  pathway: string;
+  supporting_rows: number;
+}
+
+export interface PathwayCoverageCell {
+  source: string;
+  pathway: string;
+  present: number;
+  weight: number;
+}
+
+export interface PathwayCoverageMatrix {
+  sources: string[];
+  pathways: string[];
+  cells: PathwayCoverageCell[];
+}
+
+export type ToxicityRiskBucket = 'low_risk' | 'medium_risk' | 'high_risk' | 'unknown';
+
+export interface ToxicityHeatmapDatum {
+  endpoint: string;
+  label: string | null;
+  value: number | null;
+  risk_bucket: ToxicityRiskBucket;
+}
+
+export interface CompoundOverviewResponse {
+  cpd: string;
+  limits: {
+    top_ko: number;
+    top_pathways: number;
+  };
+  summary: CompoundOverviewSummary;
+  ko_bar: KoBarDatum[];
+  pathways_top: PathwayTopDatum[];
+  pathway_coverage: PathwayCoverageMatrix;
+  toxicity_heatmap: ToxicityHeatmapDatum[];
+}
+
 export interface CompoundMetadataSource {
   name: string;
   role: string;

@@ -60,6 +60,27 @@ function getPagination(query) {
   return { page, pageSize, offset };
 }
 
+function parseOverviewLimit(value, fallback, max = 50) {
+  return Math.min(max, Math.max(1, parsePositiveInt(value, fallback)));
+}
+
+function deriveRiskBucket(label) {
+  const normalized = (label || '').toLowerCase().trim();
+  if (!normalized) {
+    return 'unknown';
+  }
+  if (normalized.includes('high toxicity') || normalized.includes('low safety')) {
+    return 'high_risk';
+  }
+  if (normalized.includes('medium toxicity') || normalized.includes('medium safety')) {
+    return 'medium_risk';
+  }
+  if (normalized.includes('low toxicity') || normalized.includes('high safety')) {
+    return 'low_risk';
+  }
+  return 'unknown';
+}
+
 function likeValue(value) {
   return `%${value}%`;
 }
@@ -335,6 +356,181 @@ app.get('/api/compounds/:cpd', (req, res, next) => {
       toxicity_scores: parseJsonObject(row.toxicity_scores),
       genes: parseJsonArray(row.genes),
       pathways: parseJsonArray(row.pathways),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/compounds/:cpd/overview', (req, res, next) => {
+  try {
+    const cpd = req.params.cpd;
+    const topKo = parseOverviewLimit(req.query.top_ko, 10);
+    const topPathways = parseOverviewLimit(req.query.top_pathways, 10);
+
+    const summary = db
+      .prepare(
+        `
+          SELECT
+            cpd,
+            compoundname,
+            compoundclass,
+            reference_count,
+            ko_count,
+            gene_count,
+            pathway_count,
+            toxicity_risk_mean,
+            high_risk_endpoint_count
+          FROM compound_summary
+          WHERE cpd = ?
+          LIMIT 1
+        `
+      )
+      .get(cpd);
+
+    if (!summary) {
+      res.status(404).json({ error: `Compound ${cpd} not found` });
+      return;
+    }
+
+    const koBar = db
+      .prepare(
+        `
+          SELECT
+            ko,
+            COUNT(*) AS count
+          FROM compound_gene_card
+          WHERE cpd = ?
+            AND ko IS NOT NULL
+            AND ko != ''
+          GROUP BY ko
+          ORDER BY count DESC, ko ASC
+          LIMIT ?
+        `
+      )
+      .all(cpd, topKo);
+
+    const pathwaysTop = db
+      .prepare(
+        `
+          SELECT
+            source,
+            pathway,
+            supporting_rows
+          FROM compound_pathway_card
+          WHERE cpd = ?
+          ORDER BY supporting_rows DESC, source ASC, pathway ASC
+          LIMIT ?
+        `
+      )
+      .all(cpd, topPathways);
+
+    const pathwaysAll = db
+      .prepare(
+        `
+          SELECT
+            source,
+            pathway,
+            supporting_rows
+          FROM compound_pathway_card
+          WHERE cpd = ?
+          ORDER BY source ASC, pathway ASC
+        `
+      )
+      .all(cpd);
+
+    const toxicityHeatmap = db
+      .prepare(
+        `
+          SELECT
+            endpoint,
+            label,
+            value
+          FROM toxicity_endpoint
+          WHERE cpd = ?
+          ORDER BY endpoint ASC
+        `
+      )
+      .all(cpd)
+      .map((row) => ({
+        ...row,
+        risk_bucket: deriveRiskBucket(row.label),
+      }));
+
+    const pathwayScoreByName = new Map();
+    for (const row of pathwaysAll) {
+      const current = pathwayScoreByName.get(row.pathway) ?? 0;
+      pathwayScoreByName.set(row.pathway, Math.max(current, Number(row.supporting_rows) || 0));
+    }
+
+    const selectedPathways = [...pathwayScoreByName.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, topPathways)
+      .map(([pathway]) => pathway);
+
+    const sourcePriority = ['HADEG', 'KEGG', 'COMPOUND_PATHWAY'];
+    const sources = [...new Set(pathwaysAll.map((row) => row.source))].sort((a, b) => {
+      const ai = sourcePriority.indexOf(a);
+      const bi = sourcePriority.indexOf(b);
+      if (ai !== -1 && bi !== -1) {
+        return ai - bi;
+      }
+      if (ai !== -1) {
+        return -1;
+      }
+      if (bi !== -1) {
+        return 1;
+      }
+      return a.localeCompare(b);
+    });
+
+    const pathwayCellMap = new Map(
+      pathwaysAll
+        .filter((row) => selectedPathways.includes(row.pathway))
+        .map((row) => [`${row.source}|${row.pathway}`, row])
+    );
+
+    const pathwayCoverageCells = [];
+    for (const source of sources) {
+      for (const pathway of selectedPathways) {
+        const key = `${source}|${pathway}`;
+        const row = pathwayCellMap.get(key);
+        pathwayCoverageCells.push({
+          source,
+          pathway,
+          present: row ? 1 : 0,
+          weight: row ? Number(row.supporting_rows) || 0 : 0,
+        });
+      }
+    }
+
+    res.json({
+      cpd,
+      limits: {
+        top_ko: topKo,
+        top_pathways: topPathways,
+      },
+      summary,
+      ko_bar: koBar.map((row) => ({
+        ko: row.ko,
+        count: Number(row.count) || 0,
+      })),
+      pathways_top: pathwaysTop.map((row) => ({
+        source: row.source,
+        pathway: row.pathway,
+        supporting_rows: Number(row.supporting_rows) || 0,
+      })),
+      pathway_coverage: {
+        sources,
+        pathways: selectedPathways,
+        cells: pathwayCoverageCells,
+      },
+      toxicity_heatmap: toxicityHeatmap.map((row) => ({
+        endpoint: row.endpoint,
+        label: row.label,
+        value: row.value === null ? null : Number(row.value),
+        risk_bucket: row.risk_bucket,
+      })),
     });
   } catch (error) {
     next(error);
