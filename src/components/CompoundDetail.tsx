@@ -181,7 +181,12 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
               <p className="font-medium">{summary.gene_count}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Pathway Count</p>
+              <p
+                className="text-sm text-gray-500"
+                title="Includes HADEG, KEGG and Compound Pathway annotations"
+              >
+                Pathway Annotations
+              </p>
               <p className="font-medium">{summary.pathway_count}</p>
             </div>
             <div>

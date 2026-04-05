@@ -145,6 +145,10 @@ function parseNumeric(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function isHighRiskLabel(label) {
+  return typeof label === 'string' && label.trim().toLowerCase() === 'high toxicity';
+}
+
 function safeString(value) {
   if (value === null || value === undefined) {
     return null;
@@ -407,7 +411,7 @@ function buildSummaries(
 
     for (const hadeg of hadegMatches) {
       if (hadeg.pathway_hadeg) {
-        compound.pathwayCountSet.add(hadeg.pathway_hadeg);
+        compound.pathwayCountSet.add(`HADEG|${hadeg.pathway_hadeg}`);
         compound.pathwayFilterSet.add(hadeg.pathway_hadeg);
         compound.pathwayHadegSet.add(hadeg.pathway_hadeg);
 
@@ -423,6 +427,7 @@ function buildSummaries(
         pathwayCardAcc.get(key).supporting_rows += keggMultiplier;
       }
       if (hadeg.compound_pathway) {
+        compound.pathwayCountSet.add(`COMPOUND_PATHWAY|${hadeg.compound_pathway}`);
         compound.pathwayFilterSet.add(hadeg.compound_pathway);
         compound.compoundPathwayClassSet.add(hadeg.compound_pathway);
 
@@ -441,7 +446,7 @@ function buildSummaries(
 
     for (const kegg of keggMatches) {
       if (kegg.pathway_kegg) {
-        compound.pathwayCountSet.add(kegg.pathway_kegg);
+        compound.pathwayCountSet.add(`KEGG|${kegg.pathway_kegg}`);
         compound.pathwayFilterSet.add(kegg.pathway_kegg);
         compound.pathwayKeggSet.add(kegg.pathway_kegg);
 
@@ -553,8 +558,12 @@ function buildSummaries(
             ).toFixed(6)
           )
         : null;
+    const highRiskEndpointCount = toxicityEndpointEntries.filter((entry) =>
+      isHighRiskLabel(entry.label)
+    ).length;
 
     const referenceList = [...compound.referenceSet].sort();
+    const referenceCount = referenceList.length;
     const koIds = sortedUnique([...compound.koSet]);
     const geneSymbols = sortedUnique([...compound.geneSet]);
     const geneNames = sortedUnique([...compound.geneNameSet]);
@@ -670,10 +679,12 @@ function buildSummaries(
       compoundname: compound.compoundname,
       compoundclass: compound.compoundclass,
       reference_ag: referenceList.join('; ') || null,
+      reference_count: referenceCount,
       ko_count: koIds.length,
       gene_count: geneSymbols.length,
       pathway_count: compound.pathwayCountSet.size,
       toxicity_risk_mean: toxicityRiskMean,
+      high_risk_endpoint_count: highRiskEndpointCount,
       toxicity_scores: JSON.stringify(toxicityScores),
       smiles,
       genes: JSON.stringify(geneSymbols),
@@ -814,10 +825,12 @@ function createSchema(db) {
       compoundname TEXT,
       compoundclass TEXT,
       reference_ag TEXT,
+      reference_count INTEGER NOT NULL DEFAULT 0,
       ko_count INTEGER NOT NULL DEFAULT 0,
       gene_count INTEGER NOT NULL DEFAULT 0,
       pathway_count INTEGER NOT NULL DEFAULT 0,
       toxicity_risk_mean REAL,
+      high_risk_endpoint_count INTEGER NOT NULL DEFAULT 0,
       toxicity_scores TEXT NOT NULL DEFAULT '{}',
       smiles TEXT,
       genes TEXT NOT NULL DEFAULT '[]',
@@ -917,7 +930,9 @@ function createIndexes(db) {
 
     CREATE INDEX idx_compound_summary_class ON compound_summary(compoundclass);
     CREATE INDEX idx_compound_summary_reference ON compound_summary(reference_ag);
+    CREATE INDEX idx_compound_summary_reference_count ON compound_summary(reference_count);
     CREATE INDEX idx_compound_summary_toxicity_risk_mean ON compound_summary(toxicity_risk_mean);
+    CREATE INDEX idx_compound_summary_high_risk_endpoint_count ON compound_summary(high_risk_endpoint_count);
     CREATE INDEX idx_compound_summary_ko_count ON compound_summary(ko_count);
     CREATE INDEX idx_compound_summary_gene_count ON compound_summary(gene_count);
 
@@ -961,9 +976,9 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
 
   const insertCompound = db.prepare(`
     INSERT INTO compound_summary (
-      cpd, compoundname, compoundclass, reference_ag, ko_count, gene_count,
-      pathway_count, toxicity_risk_mean, toxicity_scores, smiles, genes, pathways
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      cpd, compoundname, compoundclass, reference_ag, reference_count, ko_count, gene_count,
+      pathway_count, toxicity_risk_mean, high_risk_endpoint_count, toxicity_scores, smiles, genes, pathways
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertGene = db.prepare(`
@@ -1055,10 +1070,12 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
         row.compoundname,
         row.compoundclass,
         row.reference_ag,
+        row.reference_count,
         row.ko_count,
         row.gene_count,
         row.pathway_count,
         row.toxicity_risk_mean,
+        row.high_risk_endpoint_count,
         row.toxicity_scores,
         row.smiles,
         row.genes,
@@ -1180,6 +1197,18 @@ function validateDatabase(db) {
     .prepare('SELECT COUNT(DISTINCT cpd) AS total FROM toxicity_endpoint')
     .get().total;
 
+  const pathwayCountMismatches = db
+    .prepare(`
+      SELECT COUNT(*) AS total
+      FROM compound_summary cs
+      WHERE cs.pathway_count != (
+        SELECT COUNT(*)
+        FROM compound_pathway_card cpc
+        WHERE cpc.cpd = cs.cpd
+      )
+    `)
+    .get().total;
+
   return {
     integrated: tableCount('integrated_table'),
     compounds: tableCount('compound_summary'),
@@ -1195,6 +1224,7 @@ function validateDatabase(db) {
     invalidKo,
     invalidCpd,
     compoundsWithToxicity,
+    pathwayCountMismatches,
   };
 }
 
@@ -1289,6 +1319,7 @@ async function main() {
     console.log(`- compound_gene_card rows: ${checks.compoundGeneCard}`);
     console.log(`- compound_pathway_card rows: ${checks.compoundPathwayCard}`);
     console.log(`- compounds with toxicity: ${checks.compoundsWithToxicity}`);
+    console.log(`- pathway_count mismatches vs compound_pathway_card: ${checks.pathwayCountMismatches}`);
     console.log(`- invalid ko in integrated_table: ${checks.invalidKo}`);
     console.log(`- invalid cpd in integrated_table: ${checks.invalidCpd}`);
     console.log('');

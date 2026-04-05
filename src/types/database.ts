@@ -26,10 +26,12 @@ export interface CompoundSummary {
   compoundname: string | null;
   compoundclass: string | null;
   reference_ag: string | null;
+  reference_count: number;
   ko_count: number;
   gene_count: number;
   pathway_count: number;
   toxicity_risk_mean: number | null;
+  high_risk_endpoint_count: number;
   toxicity_scores: Record<string, number | null>;
   smiles: string | null;
   genes: string[];

@@ -110,7 +110,7 @@ export const CompoundMetadataPanel = memo(function CompoundMetadataPanel({
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           <MetricCard label="KO Count" value={summary.ko_count} />
           <MetricCard label="Gene Count" value={summary.gene_count} />
-          <MetricCard label="Pathway Count" value={summary.pathway_count} />
+          <MetricCard label="Pathway Annotations" value={summary.pathway_count} />
           <MetricCard label="EC Count" value={metadata.functional_annotation.ec_numbers.length} />
           <MetricCard label="Enzyme Activity Count" value={metadata.functional_annotation.enzyme_activity.length} />
           <MetricCard label="HADEG Pathways" value={metadata.functional_annotation.pathways_hadeg.length} />
@@ -167,4 +167,3 @@ export const CompoundMetadataPanel = memo(function CompoundMetadataPanel({
     </div>
   );
 });
-

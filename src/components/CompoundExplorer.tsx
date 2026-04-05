@@ -374,14 +374,20 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Gene Count
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pathway Count
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    title="Includes HADEG, KEGG and Compound Pathway annotations"
+                  >
+                    Pathway Annotations
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Toxicity Risk Mean
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Reference
+                    High Risk Endpoints
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    References
                   </th>
                 </tr>
               </thead>
@@ -414,7 +420,13 @@ export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
                       {compound.toxicity_risk_mean == null ? '-' : compound.toxicity_risk_mean.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {compound.reference_ag || '-'}
+                      {compound.high_risk_endpoint_count}
+                    </td>
+                    <td
+                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
+                      title={compound.reference_ag || 'No reference annotation'}
+                    >
+                      {compound.reference_count}
                     </td>
                   </tr>
                 ))}
