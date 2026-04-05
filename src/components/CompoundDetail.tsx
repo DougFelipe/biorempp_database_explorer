@@ -16,6 +16,7 @@ import type {
 } from '../types/database';
 import { Pagination } from './Pagination';
 import { CompoundMetadataPanel } from './CompoundMetadataPanel';
+import { CompoundOverviewTab } from './CompoundOverviewTab';
 
 interface CompoundDetailProps {
   cpd: string;
@@ -28,17 +29,19 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
   const [geneRows, setGeneRows] = useState<CompoundGeneCardRow[]>([]);
   const [pathwayRows, setPathwayRows] = useState<CompoundPathwayCardRow[]>([]);
   const [toxicityRows, setToxicityRows] = useState<ToxicityEndpoint[]>([]);
+  const [pathwayTotal, setPathwayTotal] = useState(0);
+  const [toxicityTotal, setToxicityTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [genesLoading, setGenesLoading] = useState(true);
   const [metadataLoading, setMetadataLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'genes' | 'pathways' | 'toxicity' | 'metadata'>('genes');
+  const [activeTab, setActiveTab] = useState<'overview' | 'genes' | 'pathways' | 'toxicity' | 'metadata'>('overview');
   const [genePage, setGenePage] = useState(1);
   const [geneTotalPages, setGeneTotalPages] = useState(1);
   const [genePageSize] = useState(25);
 
   useEffect(() => {
     setGenePage(1);
-    setActiveTab('genes');
+    setActiveTab('overview');
     setMetadata(null);
   }, [cpd]);
 
@@ -62,13 +65,15 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
     try {
       const [summaryData, pathwaysData, toxicityData] = await Promise.all([
         getCompoundById(cpd),
-        getCompoundPathways(cpd, { page: 1, pageSize: 1000 }),
+        getCompoundPathways(cpd, { page: 1, pageSize: 200 }),
         getCompoundToxicityProfile(cpd, { page: 1, pageSize: 200 }),
       ]);
 
       setSummary(summaryData);
       setPathwayRows(pathwaysData.data);
+      setPathwayTotal(pathwaysData.total);
       setToxicityRows(toxicityData.data);
+      setToxicityTotal(toxicityData.total);
     } catch (error) {
       console.error('Error loading compound details:', error);
     } finally {
@@ -136,7 +141,7 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
   const hadegPathways = pathwaysBySource.HADEG || [];
   const keggPathways = pathwaysBySource.KEGG || [];
   const compoundPathways = pathwaysBySource.COMPOUND_PATHWAY || [];
-  const totalPathways = pathwayRows.length;
+  const totalPathways = pathwayTotal;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -207,6 +212,16 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
         <div className="border-b border-gray-200">
           <div className="flex gap-4 px-6">
             <button
+              onClick={() => setActiveTab('overview')}
+              className={`py-3 px-4 border-b-2 font-medium text-sm ${
+                activeTab === 'overview'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Overview
+            </button>
+            <button
               onClick={() => setActiveTab('genes')}
               className={`py-3 px-4 border-b-2 font-medium text-sm ${
                 activeTab === 'genes'
@@ -234,7 +249,7 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Toxicity Profile ({toxicityRows.length})
+              Toxicity Profile ({toxicityTotal})
             </button>
             <button
               onClick={() => setActiveTab('metadata')}
@@ -250,6 +265,8 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
         </div>
 
         <div className="p-6 max-h-96 overflow-y-auto">
+          {activeTab === 'overview' && <CompoundOverviewTab cpd={cpd} />}
+
           {activeTab === 'genes' && (
             <div className="space-y-4">
               {genesLoading ? (
