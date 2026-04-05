@@ -146,24 +146,110 @@ function buildNetworkGraph(db) {
 }
 
 function buildSankeyData(db) {
-  return db
+  const koToCompound = db
     .prepare(`
       SELECT
         it.ko AS ko,
         it.cpd AS cpd,
-        te.endpoint AS endpoint,
-        te.label AS label,
-        te.value AS value
-      FROM integrated_table it
-      JOIN toxicity_endpoint te
-        ON te.cpd = it.cpd
-      WHERE it.ko IS NOT NULL
-        AND it.cpd IS NOT NULL
-        AND te.endpoint IS NOT NULL
-      GROUP BY it.ko, it.cpd, te.endpoint
-      ORDER BY it.ko ASC, it.cpd ASC, te.endpoint ASC
+        COUNT(*) AS value
+      FROM (
+        SELECT DISTINCT ko, cpd
+        FROM integrated_table
+        WHERE ko IS NOT NULL
+          AND cpd IS NOT NULL
+      ) it
+      GROUP BY it.ko, it.cpd
+      ORDER BY it.ko ASC, it.cpd ASC
     `)
     .all();
+
+  const compoundToToxicity = db
+    .prepare(`
+      SELECT
+        te.cpd AS cpd,
+        te.endpoint AS endpoint,
+        COUNT(*) AS value
+      FROM toxicity_endpoint te
+      WHERE te.cpd IS NOT NULL
+        AND te.endpoint IS NOT NULL
+      GROUP BY te.cpd, te.endpoint
+      ORDER BY te.cpd ASC, te.endpoint ASC
+    `)
+    .all();
+
+  const compoundLabelRows = db
+    .prepare(`
+      SELECT cpd, COALESCE(compoundname, cpd) AS label
+      FROM compound_summary
+      ORDER BY cpd ASC
+    `)
+    .all();
+
+  const compoundLabels = new Map(compoundLabelRows.map((row) => [row.cpd, row.label]));
+
+  const nodesById = new Map();
+  const links = [];
+
+  for (const row of koToCompound) {
+    const koId = `ko:${row.ko}`;
+    const compoundId = `compound:${row.cpd}`;
+
+    if (!nodesById.has(koId)) {
+      nodesById.set(koId, {
+        id: koId,
+        label: row.ko,
+        type: 'ko',
+      });
+    }
+
+    if (!nodesById.has(compoundId)) {
+      nodesById.set(compoundId, {
+        id: compoundId,
+        label: compoundLabels.get(row.cpd) ?? row.cpd,
+        type: 'compound',
+      });
+    }
+
+    links.push({
+      source: koId,
+      target: compoundId,
+      value: Number(row.value) || 1,
+      kind: 'ko_to_compound',
+    });
+  }
+
+  for (const row of compoundToToxicity) {
+    const compoundId = `compound:${row.cpd}`;
+    const endpointId = `toxicity:${row.endpoint}`;
+
+    if (!nodesById.has(compoundId)) {
+      nodesById.set(compoundId, {
+        id: compoundId,
+        label: compoundLabels.get(row.cpd) ?? row.cpd,
+        type: 'compound',
+      });
+    }
+
+    if (!nodesById.has(endpointId)) {
+      nodesById.set(endpointId, {
+        id: endpointId,
+        label: row.endpoint,
+        type: 'toxicity',
+      });
+    }
+
+    links.push({
+      source: compoundId,
+      target: endpointId,
+      value: Number(row.value) || 1,
+      kind: 'compound_to_toxicity',
+    });
+  }
+
+  return {
+    nodes: [...nodesById.values()],
+    links,
+  };
 }
 
 function mapIntegratedRow(row) {
@@ -175,6 +261,7 @@ function mapIntegratedRow(row) {
     enzyme_activity: row.enzyme_activity,
     ec: row.ec,
     reaction: row.reaction,
+    reaction_description: row.reaction_description,
     cpd: row.cpd,
     compoundname: row.compoundname,
     compoundclass: row.compoundclass,
@@ -275,7 +362,8 @@ async function main() {
           ko_count,
           gene_count,
           pathway_count,
-          toxicity_score,
+          toxicity_risk_mean,
+          toxicity_scores,
           smiles,
           genes,
           pathways,
@@ -286,6 +374,7 @@ async function main() {
       .all()
       .map((row) => ({
         ...row,
+        toxicity_scores: parseJsonObject(row.toxicity_scores),
         genes: parseJsonArray(row.genes),
         pathways: parseJsonArray(row.pathways),
       }));
@@ -354,7 +443,9 @@ async function main() {
 
     const sankeyData = buildSankeyData(db);
     assetEntries.push(await writeJsonAsset(assetsPath, 'sankey_data.json', sankeyData));
-    console.log(`[6/8] sankey_data.json exported (${sankeyData.length} rows)`);
+    console.log(
+      `[6/8] sankey_data.json exported (${sankeyData.nodes.length} nodes, ${sankeyData.links.length} links)`
+    );
 
     const compounds = db
       .prepare(`
@@ -373,6 +464,7 @@ async function main() {
         enzyme_activity,
         ec,
         reaction,
+        reaction_description,
         cpd,
         compoundname,
         compoundclass,
@@ -467,8 +559,13 @@ async function main() {
         directory: 'integrated_table.by_compound',
         count: integratedIndex.length,
       },
+      toxicity_risk_mean: {
+        source: 'derived',
+        formula: 'mean(value_*)',
+        missing_policy: 'null',
+      },
       phases: {
-        phase_1: ['CompoundRankingBarChart', 'PrioritizationScatter', 'CompoundPathwayHeatmap'],
+        phase_1: ['CompoundRankingBarChart', 'CompoundPathwayHeatmap'],
         phase_2: ['NetworkGraph', 'SankeyFlow', 'ToxicityRadar'],
       },
     };

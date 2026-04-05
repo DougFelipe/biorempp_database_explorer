@@ -11,6 +11,47 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const dataDir = path.join(projectRoot, 'src', 'data');
 const defaultDbPath = path.join(projectRoot, 'data', 'biorempp.sqlite');
+const DATASET_FILES = {
+  biorempp: 'biorempp_database_v1.1.0.csv',
+  hadeg: 'hadeg_db.csv',
+  kegg: 'kegg_degradation_db.csv',
+  toxcsm: 'toxcsm_db.csv',
+};
+
+const SOURCE_DETAILS = {
+  BioRemPP: {
+    name: 'BioRemPP',
+    role: 'Core compound-gene mapping',
+    color: 'green',
+  },
+  HADEG: {
+    name: 'HADEG',
+    role: 'Hydrocarbon degradation pathways',
+    color: 'blue',
+  },
+  KEGG: {
+    name: 'KEGG',
+    role: 'Metabolic pathway annotation',
+    color: 'purple',
+  },
+  ToxCSM: {
+    name: 'ToxCSM',
+    role: 'Toxicity prediction (31 endpoints)',
+    color: 'orange',
+  },
+};
+
+function extractVersionFromFilename(fileName) {
+  const match = fileName.match(/v(\d+(?:\.\d+)*)/i);
+  if (!match) {
+    return 'unknown';
+  }
+  return `v${match[1]}`;
+}
+
+function sortedUnique(values) {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
 
 function normalizeHeader(value) {
   return value.replace(/^\uFEFF/, '').trim().toLowerCase();
@@ -151,6 +192,7 @@ function buildValidatedDatasets(raw) {
       compoundclass: safeString(row.compoundclass),
       ec: safeString(row.ec),
       reaction: safeString(row.reaction),
+      reaction_description: safeString(row.reaction_description),
       reference_ag: safeString(row.referenceag ?? row.reference_ag),
       compoundname: safeString(row.compoundname),
       genesymbol: safeString(row.genesymbol),
@@ -257,10 +299,18 @@ function buildValidatedDatasets(raw) {
   };
 }
 
-function buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd) {
+function buildSummaries(
+  bioremppRows,
+  hadegByKo,
+  keggByKo,
+  toxByCpd,
+  metadataContext = { version: 'unknown', generatedAt: now() }
+) {
   const compoundAcc = new Map();
   const geneAcc = new Map();
   const pathwayAcc = new Map();
+  const geneCardAcc = new Map();
+  const pathwayCardAcc = new Map();
 
   for (const row of bioremppRows) {
     if (!compoundAcc.has(row.cpd)) {
@@ -271,8 +321,16 @@ function buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd) {
         referenceSet: new Set(),
         koSet: new Set(),
         geneSet: new Set(),
+        geneNameSet: new Set(),
+        enzymeActivitySet: new Set(),
+        ecSet: new Set(),
+        reactionSet: new Set(),
         pathwayCountSet: new Set(),
         pathwayFilterSet: new Set(),
+        pathwayHadegSet: new Set(),
+        pathwayKeggSet: new Set(),
+        compoundPathwayClassSet: new Set(),
+        sourceSet: new Set(['BioRemPP']),
       });
     }
 
@@ -290,17 +348,94 @@ function buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd) {
     if (row.genesymbol) {
       compound.geneSet.add(row.genesymbol);
     }
+    if (row.genename) {
+      compound.geneNameSet.add(row.genename);
+    }
+    if (row.enzyme_activity) {
+      compound.enzymeActivitySet.add(row.enzyme_activity);
+    }
+    if (row.ec) {
+      compound.ecSet.add(row.ec);
+    }
+    if (row.reaction) {
+      compound.reactionSet.add(row.reaction);
+    }
 
     const hadegMatches = hadegByKo.get(row.ko) ?? [];
     const keggMatches = keggByKo.get(row.ko) ?? [];
+    if (hadegMatches.length > 0) {
+      compound.sourceSet.add('HADEG');
+    }
+    if (keggMatches.length > 0) {
+      compound.sourceSet.add('KEGG');
+    }
+    const hadegMultiplier = Math.max(1, hadegMatches.length);
+    const keggMultiplier = Math.max(1, keggMatches.length);
+    const joinMultiplier = hadegMultiplier * keggMultiplier;
+
+    const geneCardKey = [
+      row.cpd,
+      row.ko,
+      row.genesymbol ?? '',
+      row.genename ?? '',
+      row.enzyme_activity ?? '',
+      row.ec ?? '',
+    ].join('|');
+
+    if (!geneCardAcc.has(geneCardKey)) {
+      geneCardAcc.set(geneCardKey, {
+        cpd: row.cpd,
+        ko: row.ko,
+        genesymbol: row.genesymbol ?? '',
+        genename: row.genename ?? '',
+        enzyme_activity: row.enzyme_activity ?? '',
+        ec: row.ec ?? '',
+        reactionSet: new Set(),
+        reactionDescriptionSet: new Set(),
+        supporting_rows: 0,
+      });
+    }
+
+    const geneCard = geneCardAcc.get(geneCardKey);
+    geneCard.supporting_rows += joinMultiplier;
+    if (row.reaction) {
+      geneCard.reactionSet.add(row.reaction);
+    }
+    if (row.reaction_description) {
+      geneCard.reactionDescriptionSet.add(row.reaction_description);
+    }
 
     for (const hadeg of hadegMatches) {
       if (hadeg.pathway_hadeg) {
         compound.pathwayCountSet.add(hadeg.pathway_hadeg);
         compound.pathwayFilterSet.add(hadeg.pathway_hadeg);
+        compound.pathwayHadegSet.add(hadeg.pathway_hadeg);
+
+        const key = `${row.cpd}|HADEG|${hadeg.pathway_hadeg}`;
+        if (!pathwayCardAcc.has(key)) {
+          pathwayCardAcc.set(key, {
+            cpd: row.cpd,
+            source: 'HADEG',
+            pathway: hadeg.pathway_hadeg,
+            supporting_rows: 0,
+          });
+        }
+        pathwayCardAcc.get(key).supporting_rows += keggMultiplier;
       }
       if (hadeg.compound_pathway) {
         compound.pathwayFilterSet.add(hadeg.compound_pathway);
+        compound.compoundPathwayClassSet.add(hadeg.compound_pathway);
+
+        const key = `${row.cpd}|COMPOUND_PATHWAY|${hadeg.compound_pathway}`;
+        if (!pathwayCardAcc.has(key)) {
+          pathwayCardAcc.set(key, {
+            cpd: row.cpd,
+            source: 'COMPOUND_PATHWAY',
+            pathway: hadeg.compound_pathway,
+            supporting_rows: 0,
+          });
+        }
+        pathwayCardAcc.get(key).supporting_rows += keggMultiplier;
       }
     }
 
@@ -308,6 +443,18 @@ function buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd) {
       if (kegg.pathway_kegg) {
         compound.pathwayCountSet.add(kegg.pathway_kegg);
         compound.pathwayFilterSet.add(kegg.pathway_kegg);
+        compound.pathwayKeggSet.add(kegg.pathway_kegg);
+
+        const key = `${row.cpd}|KEGG|${kegg.pathway_kegg}`;
+        if (!pathwayCardAcc.has(key)) {
+          pathwayCardAcc.set(key, {
+            cpd: row.cpd,
+            source: 'KEGG',
+            pathway: kegg.pathway_kegg,
+            supporting_rows: 0,
+          });
+        }
+        pathwayCardAcc.get(key).supporting_rows += hadegMultiplier;
       }
     }
 
@@ -379,16 +526,25 @@ function buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd) {
   const compoundGeneRows = [];
   const compoundPathwayRows = [];
   const compoundReferenceRows = [];
+  const compoundMetadataRows = [];
 
   for (const compound of compoundAcc.values()) {
     const tox = toxByCpd.get(compound.cpd);
-    const numericToxicityValues = tox
-      ? Object.values(tox.toxicity_values).filter(
-          (value) => typeof value === 'number' && Number.isFinite(value)
-        )
+    const toxicityEndpointEntries = tox
+      ? [...tox.endpoint_map.values()].sort((a, b) => a.endpoint.localeCompare(b.endpoint))
       : [];
 
-    const toxicityScore =
+    const toxicityScores = toxicityEndpointEntries.reduce((acc, entry) => {
+      acc[entry.endpoint] =
+        typeof entry.value === 'number' && Number.isFinite(entry.value) ? entry.value : null;
+      return acc;
+    }, {});
+
+    const numericToxicityValues = toxicityEndpointEntries
+      .map((entry) => entry.value)
+      .filter((value) => typeof value === 'number' && Number.isFinite(value));
+
+    const toxicityRiskMean =
       numericToxicityValues.length > 0
         ? Number(
             (
@@ -396,13 +552,99 @@ function buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd) {
               numericToxicityValues.length
             ).toFixed(6)
           )
-        : 0;
+        : null;
 
     const referenceList = [...compound.referenceSet].sort();
-    const genes = [...compound.geneSet].sort();
-    const pathways = [...compound.pathwayFilterSet].sort();
+    const koIds = sortedUnique([...compound.koSet]);
+    const geneSymbols = sortedUnique([...compound.geneSet]);
+    const geneNames = sortedUnique([...compound.geneNameSet]);
+    const enzymeActivities = sortedUnique([...compound.enzymeActivitySet]);
+    const ecNumbers = sortedUnique([...compound.ecSet]);
+    const pathways = sortedUnique([...compound.pathwayFilterSet]);
+    const pathwaysHadeg = sortedUnique([...compound.pathwayHadegSet]);
+    const pathwaysKegg = sortedUnique([...compound.pathwayKeggSet]);
+    const compoundPathwayClasses = sortedUnique([...compound.compoundPathwayClassSet]);
+    const reactionCount = compound.reactionSet.size;
+    const chebiId = tox?.chebi ?? null;
+    const smiles = tox?.smiles ?? null;
 
-    for (const genesymbol of genes) {
+    if (tox) {
+      compound.sourceSet.add('ToxCSM');
+    }
+
+    const dataSources = ['BioRemPP', 'HADEG', 'KEGG', 'ToxCSM']
+      .filter((sourceName) => compound.sourceSet.has(sourceName))
+      .map((sourceName) => SOURCE_DETAILS[sourceName]);
+
+    const completenessChecks = [
+      Boolean(compound.cpd),
+      Boolean(compound.compoundname),
+      Boolean(compound.compoundclass),
+      koIds.length > 0,
+      geneSymbols.length > 0,
+      Boolean(chebiId),
+      Boolean(smiles),
+    ];
+
+    const completenessFilled = completenessChecks.filter(Boolean).length;
+    const completenessPct = Number(
+      ((completenessFilled / completenessChecks.length) * 100).toFixed(2)
+    );
+
+    const crossReferenceChecks = [
+      Boolean(compound.cpd),
+      Boolean(chebiId),
+      ecNumbers.length > 0,
+      reactionCount > 0,
+    ];
+    const crossReferenceCovered = crossReferenceChecks.filter(Boolean).length;
+
+    const metadata = {
+      identifiers: {
+        cpd: compound.cpd,
+        compound_name: compound.compoundname ?? null,
+        compound_class: compound.compoundclass ?? null,
+        ko_ids: koIds,
+        gene_symbols: geneSymbols,
+        gene_names: geneNames,
+        chebi_id: chebiId,
+        smiles,
+      },
+      functional_annotation: {
+        enzyme_activity: enzymeActivities,
+        ec_numbers: ecNumbers,
+        pathways_hadeg: pathwaysHadeg,
+        pathways_kegg: pathwaysKegg,
+        compound_pathway_class: compoundPathwayClasses,
+        reaction_count: reactionCount,
+      },
+      chemical_information: {
+        compound_name: compound.compoundname ?? null,
+        compound_class: compound.compoundclass ?? null,
+        smiles,
+        chebi: chebiId,
+      },
+      data_sources: dataSources,
+      provenance: {
+        version: metadataContext.version,
+        last_updated: metadataContext.generatedAt,
+        pipeline: 'BioRemPP Database Generator',
+      },
+      cross_references: {
+        kegg_compound_id: compound.cpd,
+        chebi: chebiId,
+        ec_numbers: ecNumbers,
+        reaction_count: reactionCount,
+      },
+      data_quality: {
+        ko_format_valid: koIds.every((koId) => KO_PATTERN.test(koId)),
+        cpd_format_valid: CPD_PATTERN.test(compound.cpd),
+        completeness_pct: completenessPct,
+        cross_references_coverage: `${crossReferenceCovered}/${crossReferenceChecks.length}`,
+      },
+    };
+
+    for (const genesymbol of geneSymbols) {
       compoundGeneRows.push({
         cpd: compound.cpd,
         genesymbol,
@@ -428,13 +670,19 @@ function buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd) {
       compoundname: compound.compoundname,
       compoundclass: compound.compoundclass,
       reference_ag: referenceList.join('; ') || null,
-      ko_count: compound.koSet.size,
-      gene_count: genes.length,
+      ko_count: koIds.length,
+      gene_count: geneSymbols.length,
       pathway_count: compound.pathwayCountSet.size,
-      toxicity_score: toxicityScore,
-      smiles: tox?.smiles ?? null,
-      genes: JSON.stringify(genes),
+      toxicity_risk_mean: toxicityRiskMean,
+      toxicity_scores: JSON.stringify(toxicityScores),
+      smiles,
+      genes: JSON.stringify(geneSymbols),
       pathways: JSON.stringify(pathways),
+    });
+
+    compoundMetadataRows.push({
+      cpd: compound.cpd,
+      metadata_json: JSON.stringify(metadata),
     });
   }
 
@@ -461,6 +709,32 @@ function buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd) {
   }
 
   const toxicityEndpointRows = [];
+  const compoundGeneCardRows = [];
+  const compoundPathwayCardRows = [];
+
+  for (const card of geneCardAcc.values()) {
+    compoundGeneCardRows.push({
+      cpd: card.cpd,
+      ko: card.ko,
+      genesymbol: card.genesymbol,
+      genename: card.genename,
+      enzyme_activity: card.enzyme_activity,
+      ec: card.ec,
+      reactions: JSON.stringify([...card.reactionSet].sort()),
+      reaction_descriptions: JSON.stringify([...card.reactionDescriptionSet].sort()),
+      supporting_rows: card.supporting_rows,
+    });
+  }
+
+  for (const pathwayCard of pathwayCardAcc.values()) {
+    compoundPathwayCardRows.push({
+      cpd: pathwayCard.cpd,
+      source: pathwayCard.source,
+      pathway: pathwayCard.pathway,
+      supporting_rows: pathwayCard.supporting_rows,
+    });
+  }
+
   for (const compound of compoundAcc.values()) {
     const tox = toxByCpd.get(compound.cpd);
     if (!tox) {
@@ -484,9 +758,12 @@ function buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd) {
     compoundGeneRows,
     compoundPathwayRows,
     compoundReferenceRows,
+    compoundMetadataRows,
     geneRows,
     pathwayRows,
     toxicityEndpointRows,
+    compoundGeneCardRows,
+    compoundPathwayCardRows,
   };
 }
 
@@ -517,6 +794,7 @@ function createSchema(db) {
       enzyme_activity TEXT,
       ec TEXT,
       reaction TEXT,
+      reaction_description TEXT,
       cpd TEXT CHECK (cpd IS NULL OR cpd GLOB 'C[0-9][0-9][0-9][0-9][0-9]'),
       compoundname TEXT,
       compoundclass TEXT,
@@ -539,7 +817,8 @@ function createSchema(db) {
       ko_count INTEGER NOT NULL DEFAULT 0,
       gene_count INTEGER NOT NULL DEFAULT 0,
       pathway_count INTEGER NOT NULL DEFAULT 0,
-      toxicity_score REAL NOT NULL DEFAULT 0,
+      toxicity_risk_mean REAL,
+      toxicity_scores TEXT NOT NULL DEFAULT '{}',
       smiles TEXT,
       genes TEXT NOT NULL DEFAULT '[]',
       pathways TEXT NOT NULL DEFAULT '[]',
@@ -593,6 +872,35 @@ function createSchema(db) {
       reference_ag TEXT NOT NULL,
       PRIMARY KEY (cpd, reference_ag)
     );
+
+    CREATE TABLE compound_metadata (
+      cpd TEXT PRIMARY KEY CHECK (cpd GLOB 'C[0-9][0-9][0-9][0-9][0-9]'),
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE compound_gene_card (
+      cpd TEXT NOT NULL CHECK (cpd GLOB 'C[0-9][0-9][0-9][0-9][0-9]'),
+      ko TEXT NOT NULL DEFAULT '',
+      genesymbol TEXT NOT NULL DEFAULT '',
+      genename TEXT NOT NULL DEFAULT '',
+      enzyme_activity TEXT NOT NULL DEFAULT '',
+      ec TEXT NOT NULL DEFAULT '',
+      reactions TEXT NOT NULL DEFAULT '[]',
+      reaction_descriptions TEXT NOT NULL DEFAULT '[]',
+      supporting_rows INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (cpd, ko, genesymbol, genename, enzyme_activity, ec)
+    );
+
+    CREATE TABLE compound_pathway_card (
+      cpd TEXT NOT NULL CHECK (cpd GLOB 'C[0-9][0-9][0-9][0-9][0-9]'),
+      source TEXT NOT NULL,
+      pathway TEXT NOT NULL,
+      supporting_rows INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (cpd, source, pathway)
+    );
   `);
 }
 
@@ -609,7 +917,7 @@ function createIndexes(db) {
 
     CREATE INDEX idx_compound_summary_class ON compound_summary(compoundclass);
     CREATE INDEX idx_compound_summary_reference ON compound_summary(reference_ag);
-    CREATE INDEX idx_compound_summary_toxicity ON compound_summary(toxicity_score);
+    CREATE INDEX idx_compound_summary_toxicity_risk_mean ON compound_summary(toxicity_risk_mean);
     CREATE INDEX idx_compound_summary_ko_count ON compound_summary(ko_count);
     CREATE INDEX idx_compound_summary_gene_count ON compound_summary(gene_count);
 
@@ -630,24 +938,32 @@ function createIndexes(db) {
     CREATE INDEX idx_compound_pathway_map_cpd ON compound_pathway_map(cpd);
     CREATE INDEX idx_compound_reference_map_reference ON compound_reference_map(reference_ag);
     CREATE INDEX idx_compound_reference_map_cpd ON compound_reference_map(cpd);
+
+    CREATE INDEX idx_compound_gene_card_cpd ON compound_gene_card(cpd);
+    CREATE INDEX idx_compound_gene_card_symbol ON compound_gene_card(genesymbol);
+    CREATE INDEX idx_compound_gene_card_ko ON compound_gene_card(ko);
+
+    CREATE INDEX idx_compound_pathway_card_cpd ON compound_pathway_card(cpd);
+    CREATE INDEX idx_compound_pathway_card_source ON compound_pathway_card(source);
+    CREATE INDEX idx_compound_pathway_card_pathway ON compound_pathway_card(pathway);
   `);
 }
 
 function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summaries) {
   const insertIntegrated = db.prepare(`
     INSERT INTO integrated_table (
-      ko, genesymbol, genename, enzyme_activity, ec, reaction,
+      ko, genesymbol, genename, enzyme_activity, ec, reaction, reaction_description,
       cpd, compoundname, compoundclass, reference_ag,
       pathway_hadeg, pathway_kegg, compound_pathway,
       smiles, chebi, toxicity_labels, toxicity_values
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertCompound = db.prepare(`
     INSERT INTO compound_summary (
       cpd, compoundname, compoundclass, reference_ag, ko_count, gene_count,
-      pathway_count, toxicity_score, smiles, genes, pathways
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      pathway_count, toxicity_risk_mean, toxicity_scores, smiles, genes, pathways
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertGene = db.prepare(`
@@ -680,6 +996,22 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
     INSERT INTO compound_reference_map (cpd, reference_ag) VALUES (?, ?)
   `);
 
+  const insertCompoundMetadata = db.prepare(`
+    INSERT INTO compound_metadata (cpd, metadata_json) VALUES (?, ?)
+  `);
+
+  const insertCompoundGeneCard = db.prepare(`
+    INSERT INTO compound_gene_card (
+      cpd, ko, genesymbol, genename, enzyme_activity, ec, reactions, reaction_descriptions, supporting_rows
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertCompoundPathwayCard = db.prepare(`
+    INSERT INTO compound_pathway_card (
+      cpd, source, pathway, supporting_rows
+    ) VALUES (?, ?, ?, ?)
+  `);
+
   let integratedInserted = 0;
 
   const transaction = db.transaction(() => {
@@ -699,6 +1031,7 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
             row.enzyme_activity,
             row.ec,
             row.reaction,
+            row.reaction_description,
             row.cpd,
             row.compoundname ?? tox?.compoundname ?? null,
             row.compoundclass,
@@ -725,7 +1058,8 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
         row.ko_count,
         row.gene_count,
         row.pathway_count,
-        row.toxicity_score,
+        row.toxicity_risk_mean,
+        row.toxicity_scores,
         row.smiles,
         row.genes,
         row.pathways
@@ -774,6 +1108,33 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
     for (const row of summaries.compoundReferenceRows) {
       insertCompoundReference.run(row.cpd, row.reference_ag);
     }
+
+    for (const row of summaries.compoundMetadataRows) {
+      insertCompoundMetadata.run(row.cpd, row.metadata_json);
+    }
+
+    for (const row of summaries.compoundGeneCardRows) {
+      insertCompoundGeneCard.run(
+        row.cpd,
+        row.ko,
+        row.genesymbol,
+        row.genename,
+        row.enzyme_activity,
+        row.ec,
+        row.reactions,
+        row.reaction_descriptions,
+        row.supporting_rows
+      );
+    }
+
+    for (const row of summaries.compoundPathwayCardRows) {
+      insertCompoundPathwayCard.run(
+        row.cpd,
+        row.source,
+        row.pathway,
+        row.supporting_rows
+      );
+    }
   });
 
   transaction();
@@ -787,6 +1148,9 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
     compoundGeneInserted: summaries.compoundGeneRows.length,
     compoundPathwayInserted: summaries.compoundPathwayRows.length,
     compoundReferenceInserted: summaries.compoundReferenceRows.length,
+    compoundMetadataInserted: summaries.compoundMetadataRows.length,
+    compoundGeneCardInserted: summaries.compoundGeneCardRows.length,
+    compoundPathwayCardInserted: summaries.compoundPathwayCardRows.length,
   };
 }
 
@@ -825,6 +1189,9 @@ function validateDatabase(db) {
     compoundGeneMap: tableCount('compound_gene_map'),
     compoundPathwayMap: tableCount('compound_pathway_map'),
     compoundReferenceMap: tableCount('compound_reference_map'),
+    compoundMetadata: tableCount('compound_metadata'),
+    compoundGeneCard: tableCount('compound_gene_card'),
+    compoundPathwayCard: tableCount('compound_pathway_card'),
     invalidKo,
     invalidCpd,
     compoundsWithToxicity,
@@ -834,16 +1201,17 @@ function validateDatabase(db) {
 async function main() {
   const runStartedAt = Date.now();
   const dbPath = process.env.SQLITE_DB_PATH || defaultDbPath;
+  const generatedAt = now();
 
-  console.log(`SQLite ingestion started at ${now()}`);
+  console.log(`SQLite ingestion started at ${generatedAt}`);
   console.log(`Target DB: ${dbPath}`);
 
   const readStartedAt = Date.now();
   const raw = {
-    biorempp: await readCsvFile(path.join(dataDir, 'biorempp_database_v1.1.0.csv')),
-    hadeg: await readCsvFile(path.join(dataDir, 'hadeg_db.csv')),
-    kegg: await readCsvFile(path.join(dataDir, 'kegg_degradation_db.csv')),
-    toxcsm: await readCsvFile(path.join(dataDir, 'toxcsm_db.csv')),
+    biorempp: await readCsvFile(path.join(dataDir, DATASET_FILES.biorempp)),
+    hadeg: await readCsvFile(path.join(dataDir, DATASET_FILES.hadeg)),
+    kegg: await readCsvFile(path.join(dataDir, DATASET_FILES.kegg)),
+    toxcsm: await readCsvFile(path.join(dataDir, DATASET_FILES.toxcsm)),
   };
   printStep('1/8', 'CSV files loaded', readStartedAt);
 
@@ -864,7 +1232,16 @@ async function main() {
   printStep('3/8', 'Join maps created', mapStartedAt);
 
   const summaryStartedAt = Date.now();
-  const summaries = buildSummaries(bioremppRows, hadegByKo, keggByKo, toxByCpd);
+  const summaries = buildSummaries(
+    bioremppRows,
+    hadegByKo,
+    keggByKo,
+    toxByCpd,
+    {
+      version: extractVersionFromFilename(DATASET_FILES.biorempp),
+      generatedAt,
+    }
+  );
   printStep('4/8', 'Summary and map tables computed', summaryStartedAt);
 
   const dbSetupStartedAt = Date.now();
@@ -908,6 +1285,9 @@ async function main() {
     console.log(`- compound_gene_map rows: ${checks.compoundGeneMap}`);
     console.log(`- compound_pathway_map rows: ${checks.compoundPathwayMap}`);
     console.log(`- compound_reference_map rows: ${checks.compoundReferenceMap}`);
+    console.log(`- compound_metadata rows: ${checks.compoundMetadata}`);
+    console.log(`- compound_gene_card rows: ${checks.compoundGeneCard}`);
+    console.log(`- compound_pathway_card rows: ${checks.compoundPathwayCard}`);
     console.log(`- compounds with toxicity: ${checks.compoundsWithToxicity}`);
     console.log(`- invalid ko in integrated_table: ${checks.invalidKo}`);
     console.log(`- invalid cpd in integrated_table: ${checks.invalidCpd}`);

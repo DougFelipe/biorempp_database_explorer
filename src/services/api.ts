@@ -1,9 +1,13 @@
 import type {
   CompoundSummary,
+  CompoundMetadata,
   GeneSummary,
   PathwaySummary,
   IntegratedData,
   ToxicityEndpoint,
+  CompoundGeneCardRow,
+  CompoundPathwayCardRow,
+  PathwayOption,
   CompoundFilters,
   GeneFilters,
   PathwayFilters,
@@ -50,8 +54,48 @@ export async function getCompoundById(cpd: string): Promise<CompoundSummary | nu
   return fetchJson(`/api/compounds/${encodeURIComponent(cpd)}`);
 }
 
+export async function getCompoundMetadata(cpd: string): Promise<CompoundMetadata> {
+  return fetchJson(`/api/compounds/${encodeURIComponent(cpd)}/metadata`);
+}
+
 export async function getCompoundDetails(cpd: string): Promise<IntegratedData[]> {
   return fetchJson(`/api/compounds/${encodeURIComponent(cpd)}/details`);
+}
+
+export async function getCompoundGenes(
+  cpd: string,
+  pagination: PaginationParams = { page: 1, pageSize: 100 }
+): Promise<PaginatedResponse<CompoundGeneCardRow>> {
+  return fetchJson(
+    `/api/compounds/${encodeURIComponent(cpd)}/genes${buildQuery({
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    })}`
+  );
+}
+
+export async function getCompoundPathways(
+  cpd: string,
+  pagination: PaginationParams = { page: 1, pageSize: 200 }
+): Promise<PaginatedResponse<CompoundPathwayCardRow>> {
+  return fetchJson(
+    `/api/compounds/${encodeURIComponent(cpd)}/pathways${buildQuery({
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    })}`
+  );
+}
+
+export async function getCompoundToxicityProfile(
+  cpd: string,
+  pagination: PaginationParams = { page: 1, pageSize: 100 }
+): Promise<PaginatedResponse<ToxicityEndpoint>> {
+  return fetchJson(
+    `/api/compounds/${encodeURIComponent(cpd)}/toxicity-profile${buildQuery({
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    })}`
+  );
 }
 
 export async function getGenes(
@@ -109,6 +153,10 @@ export async function getUniquePathways(): Promise<string[]> {
   return fetchJson('/api/meta/pathways');
 }
 
+export async function getPathwayOptions(): Promise<PathwayOption[]> {
+  return fetchJson('/api/meta/pathways/grouped');
+}
+
 export async function getToxicityEndpoints(): Promise<string[]> {
   return fetchJson('/api/meta/toxicity/endpoints');
 }
@@ -129,7 +177,8 @@ export async function exportCompoundsToCSV(filters: CompoundFilters = {}): Promi
     'KO Count',
     'Gene Count',
     'Pathway Count',
-    'Toxicity Score',
+    'Toxicity Risk Mean',
+    'Toxicity Scores (Endpoint JSON)',
     'SMILES',
   ];
 
@@ -141,7 +190,8 @@ export async function exportCompoundsToCSV(filters: CompoundFilters = {}): Promi
     compound.ko_count,
     compound.gene_count,
     compound.pathway_count,
-    compound.toxicity_score,
+    compound.toxicity_risk_mean ?? '',
+    JSON.stringify(compound.toxicity_scores || {}),
     compound.smiles || '',
   ]);
 

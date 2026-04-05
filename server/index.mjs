@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || (process.env.NODE_ENV === 'production' ? 3000 : 3101));
 const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH || path.join(projectRoot, 'data', 'biorempp.sqlite');
 const ASSETS_VERSION = process.env.ASSETS_VERSION || 'v0.0.2';
 const ASSETS_ROOT_PATH = process.env.ASSETS_ROOT_PATH || path.join(projectRoot, 'data', 'assets');
@@ -23,6 +23,16 @@ const db = new Database(SQLITE_DB_PATH, {
   readonly: true,
   fileMustExist: true,
 });
+const hasCompoundMetadataTable = Boolean(
+  db
+    .prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table' AND name = 'compound_metadata'
+      LIMIT 1
+    `)
+    .get()
+);
 
 const app = express();
 app.use(express.json());
@@ -104,6 +114,53 @@ function readAssetManifest() {
   return JSON.parse(fs.readFileSync(ASSET_MANIFEST_PATH, 'utf8'));
 }
 
+function createEmptyCompoundMetadata(cpd) {
+  return {
+    identifiers: {
+      cpd,
+      compound_name: null,
+      compound_class: null,
+      ko_ids: [],
+      gene_symbols: [],
+      gene_names: [],
+      chebi_id: null,
+      smiles: null,
+    },
+    functional_annotation: {
+      enzyme_activity: [],
+      ec_numbers: [],
+      pathways_hadeg: [],
+      pathways_kegg: [],
+      compound_pathway_class: [],
+      reaction_count: 0,
+    },
+    chemical_information: {
+      compound_name: null,
+      compound_class: null,
+      smiles: null,
+      chebi: null,
+    },
+    data_sources: [],
+    provenance: {
+      version: 'unknown',
+      last_updated: null,
+      pipeline: 'BioRemPP Database Generator',
+    },
+    cross_references: {
+      kegg_compound_id: cpd,
+      chebi: null,
+      ec_numbers: [],
+      reaction_count: 0,
+    },
+    data_quality: {
+      ko_format_valid: false,
+      cpd_format_valid: /^C\d{5}$/.test(cpd),
+      completeness_pct: 0,
+      cross_references_coverage: '0/4',
+    },
+  };
+}
+
 app.get('/api/compounds', (req, res, next) => {
   try {
     const { page, pageSize, offset } = getPagination(req.query);
@@ -126,15 +183,38 @@ app.get('/api/compounds', (req, res, next) => {
       params.push(String(req.query.reference_ag));
     }
     if (req.query.pathway) {
+      if (req.query.pathway_source) {
+        where.push(`
+          EXISTS (
+            SELECT 1
+            FROM compound_pathway_card cpc
+            WHERE cpc.cpd = cs.cpd
+              AND cpc.source = ?
+              AND cpc.pathway = ?
+          )
+        `);
+        params.push(String(req.query.pathway_source), String(req.query.pathway));
+      } else {
+        where.push(`
+          EXISTS (
+            SELECT 1
+            FROM compound_pathway_card cpc
+            WHERE cpc.cpd = cs.cpd
+              AND cpc.pathway = ?
+          )
+        `);
+        params.push(String(req.query.pathway));
+      }
+    } else if (req.query.pathway_source) {
       where.push(`
         EXISTS (
           SELECT 1
-          FROM compound_pathway_map cpm
-          WHERE cpm.cpd = cs.cpd
-            AND cpm.pathway = ?
+          FROM compound_pathway_card cpc
+          WHERE cpc.cpd = cs.cpd
+            AND cpc.source = ?
         )
       `);
-      params.push(String(req.query.pathway));
+      params.push(String(req.query.pathway_source));
     }
     if (req.query.gene) {
       where.push(`
@@ -146,17 +226,6 @@ app.get('/api/compounds', (req, res, next) => {
         )
       `);
       params.push(String(req.query.gene));
-    }
-
-    const toxicityMin = parseNumber(req.query.toxicity_score_min);
-    if (toxicityMin !== undefined) {
-      where.push('cs.toxicity_score >= ?');
-      params.push(toxicityMin);
-    }
-    const toxicityMax = parseNumber(req.query.toxicity_score_max);
-    if (toxicityMax !== undefined) {
-      where.push('cs.toxicity_score <= ?');
-      params.push(toxicityMax);
     }
 
     const koCountMin = parseNumber(req.query.ko_count_min);
@@ -203,7 +272,8 @@ app.get('/api/compounds', (req, res, next) => {
           cs.ko_count,
           cs.gene_count,
           cs.pathway_count,
-          cs.toxicity_score,
+          cs.toxicity_risk_mean,
+          cs.toxicity_scores,
           cs.smiles,
           cs.genes,
           cs.pathways,
@@ -216,6 +286,7 @@ app.get('/api/compounds', (req, res, next) => {
       .all(...params, pageSize, offset)
       .map((row) => ({
         ...row,
+        toxicity_scores: parseJsonObject(row.toxicity_scores),
         genes: parseJsonArray(row.genes),
         pathways: parseJsonArray(row.pathways),
       }));
@@ -238,7 +309,8 @@ app.get('/api/compounds/:cpd', (req, res, next) => {
           ko_count,
           gene_count,
           pathway_count,
-          toxicity_score,
+          toxicity_risk_mean,
+          toxicity_scores,
           smiles,
           genes,
           pathways,
@@ -256,8 +328,74 @@ app.get('/api/compounds/:cpd', (req, res, next) => {
 
     res.json({
       ...row,
+      toxicity_scores: parseJsonObject(row.toxicity_scores),
       genes: parseJsonArray(row.genes),
       pathways: parseJsonArray(row.pathways),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/compounds/:cpd/metadata', (req, res, next) => {
+  try {
+    const cpd = req.params.cpd;
+    const emptyMetadata = createEmptyCompoundMetadata(cpd);
+
+    if (!hasCompoundMetadataTable) {
+      res.json(emptyMetadata);
+      return;
+    }
+
+    const row = db
+      .prepare(`
+        SELECT metadata_json
+        FROM compound_metadata
+        WHERE cpd = ?
+        LIMIT 1
+      `)
+      .get(cpd);
+
+    if (!row?.metadata_json) {
+      res.json(emptyMetadata);
+      return;
+    }
+
+    const parsed = parseJsonObject(row.metadata_json);
+    res.json({
+      ...emptyMetadata,
+      ...parsed,
+      identifiers: {
+        ...emptyMetadata.identifiers,
+        ...(parsed.identifiers && typeof parsed.identifiers === 'object' ? parsed.identifiers : {}),
+        cpd,
+      },
+      functional_annotation: {
+        ...emptyMetadata.functional_annotation,
+        ...(parsed.functional_annotation && typeof parsed.functional_annotation === 'object'
+          ? parsed.functional_annotation
+          : {}),
+      },
+      chemical_information: {
+        ...emptyMetadata.chemical_information,
+        ...(parsed.chemical_information && typeof parsed.chemical_information === 'object'
+          ? parsed.chemical_information
+          : {}),
+      },
+      provenance: {
+        ...emptyMetadata.provenance,
+        ...(parsed.provenance && typeof parsed.provenance === 'object' ? parsed.provenance : {}),
+      },
+      cross_references: {
+        ...emptyMetadata.cross_references,
+        ...(parsed.cross_references && typeof parsed.cross_references === 'object'
+          ? parsed.cross_references
+          : {}),
+      },
+      data_quality: {
+        ...emptyMetadata.data_quality,
+        ...(parsed.data_quality && typeof parsed.data_quality === 'object' ? parsed.data_quality : {}),
+      },
     });
   } catch (error) {
     next(error);
@@ -276,6 +414,7 @@ app.get('/api/compounds/:cpd/details', (req, res, next) => {
           enzyme_activity,
           ec,
           reaction,
+          reaction_description,
           cpd,
           compoundname,
           compoundclass,
@@ -300,6 +439,144 @@ app.get('/api/compounds/:cpd/details', (req, res, next) => {
       }));
 
     res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/compounds/:cpd/genes', (req, res, next) => {
+  try {
+    const { page, pageSize, offset } = getPagination(req.query);
+    const where = ['cpd = ?'];
+    const params = [req.params.cpd];
+
+    if (req.query.search) {
+      const search = likeValue(String(req.query.search));
+      where.push(`
+        (
+          ko LIKE ? COLLATE NOCASE
+          OR genesymbol LIKE ? COLLATE NOCASE
+          OR genename LIKE ? COLLATE NOCASE
+          OR enzyme_activity LIKE ? COLLATE NOCASE
+          OR ec LIKE ? COLLATE NOCASE
+        )
+      `);
+      params.push(search, search, search, search, search);
+    }
+
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+    const total = db
+      .prepare(`SELECT COUNT(*) AS total FROM compound_gene_card ${whereSql}`)
+      .get(...params).total;
+
+    const rows = db
+      .prepare(`
+        SELECT
+          cpd,
+          ko,
+          genesymbol,
+          genename,
+          enzyme_activity,
+          ec,
+          reaction_descriptions,
+          supporting_rows,
+          updated_at
+        FROM compound_gene_card
+        ${whereSql}
+        ORDER BY supporting_rows DESC, genesymbol ASC, ko ASC
+        LIMIT ? OFFSET ?
+      `)
+      .all(...params, pageSize, offset)
+      .map((row) => {
+        const reactionDescriptions = parseJsonArray(row.reaction_descriptions);
+        return {
+          ...row,
+          reaction_descriptions: reactionDescriptions.slice(0, 10),
+          reaction_descriptions_total: reactionDescriptions.length,
+        };
+      });
+
+    res.json(toPaginatedResponse(rows, total, page, pageSize));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/compounds/:cpd/pathways', (req, res, next) => {
+  try {
+    const { page, pageSize, offset } = getPagination(req.query);
+    const where = ['cpd = ?'];
+    const params = [req.params.cpd];
+
+    if (req.query.source) {
+      where.push('source = ?');
+      params.push(String(req.query.source));
+    }
+    if (req.query.search) {
+      where.push('pathway LIKE ? COLLATE NOCASE');
+      params.push(likeValue(String(req.query.search)));
+    }
+
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+    const total = db
+      .prepare(`SELECT COUNT(*) AS total FROM compound_pathway_card ${whereSql}`)
+      .get(...params).total;
+
+    const rows = db
+      .prepare(`
+        SELECT
+          cpd,
+          source,
+          pathway,
+          supporting_rows,
+          updated_at
+        FROM compound_pathway_card
+        ${whereSql}
+        ORDER BY source ASC, pathway ASC
+        LIMIT ? OFFSET ?
+      `)
+      .all(...params, pageSize, offset);
+
+    res.json(toPaginatedResponse(rows, total, page, pageSize));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/compounds/:cpd/toxicity-profile', (req, res, next) => {
+  try {
+    const { page, pageSize, offset } = getPagination(req.query);
+    const where = ['cpd = ?'];
+    const params = [req.params.cpd];
+
+    if (req.query.endpoint) {
+      where.push('endpoint = ?');
+      params.push(String(req.query.endpoint));
+    }
+
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+    const total = db
+      .prepare(`SELECT COUNT(*) AS total FROM toxicity_endpoint ${whereSql}`)
+      .get(...params).total;
+
+    const rows = db
+      .prepare(`
+        SELECT
+          cpd,
+          compoundname,
+          compoundclass,
+          endpoint,
+          label,
+          value,
+          updated_at
+        FROM toxicity_endpoint
+        ${whereSql}
+        ORDER BY endpoint ASC
+        LIMIT ? OFFSET ?
+      `)
+      .all(...params, pageSize, offset);
+
+    res.json(toPaginatedResponse(rows, total, page, pageSize));
   } catch (error) {
     next(error);
   }
@@ -526,6 +803,23 @@ app.get('/api/meta/pathways', (_req, res, next) => {
       ORDER BY pathway
     `);
     res.json(values);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/meta/pathways/grouped', (_req, res, next) => {
+  try {
+    const rows = db
+      .prepare(`
+        SELECT pathway, source
+        FROM pathway_summary
+        WHERE pathway IS NOT NULL
+          AND source IN ('HADEG', 'KEGG')
+        ORDER BY source ASC, pathway ASC
+      `)
+      .all();
+    res.json(rows);
   } catch (error) {
     next(error);
   }

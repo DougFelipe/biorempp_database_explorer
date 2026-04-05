@@ -6,6 +6,7 @@ export interface IntegratedData {
   enzyme_activity: string | null;
   ec: string | null;
   reaction: string | null;
+  reaction_description: string | null;
   cpd: string | null;
   compoundname: string | null;
   compoundclass: string | null;
@@ -28,11 +29,63 @@ export interface CompoundSummary {
   ko_count: number;
   gene_count: number;
   pathway_count: number;
-  toxicity_score: number;
+  toxicity_risk_mean: number | null;
+  toxicity_scores: Record<string, number | null>;
   smiles: string | null;
   genes: string[];
   pathways: string[];
   updated_at: string;
+}
+
+export interface CompoundMetadataSource {
+  name: string;
+  role: string;
+  color: 'green' | 'blue' | 'purple' | 'orange' | string;
+}
+
+export interface CompoundMetadata {
+  identifiers: {
+    cpd: string;
+    compound_name: string | null;
+    compound_class: string | null;
+    ko_ids: string[];
+    gene_symbols: string[];
+    gene_names: string[];
+    chebi_id: string | null;
+    smiles: string | null;
+  };
+  functional_annotation: {
+    enzyme_activity: string[];
+    ec_numbers: string[];
+    pathways_hadeg: string[];
+    pathways_kegg: string[];
+    compound_pathway_class: string[];
+    reaction_count: number;
+  };
+  chemical_information: {
+    compound_name: string | null;
+    compound_class: string | null;
+    smiles: string | null;
+    chebi: string | null;
+  };
+  data_sources: CompoundMetadataSource[];
+  provenance: {
+    version: string;
+    last_updated: string | null;
+    pipeline: string;
+  };
+  cross_references: {
+    kegg_compound_id: string;
+    chebi: string | null;
+    ec_numbers: string[];
+    reaction_count: number;
+  };
+  data_quality: {
+    ko_format_valid: boolean;
+    cpd_format_valid: boolean;
+    completeness_pct: number;
+    cross_references_coverage: string;
+  };
 }
 
 export interface GeneSummary {
@@ -56,10 +109,9 @@ export interface PathwaySummary {
 export interface CompoundFilters {
   compoundclass?: string;
   reference_ag?: string;
+  pathway_source?: string;
   pathway?: string;
   gene?: string;
-  toxicity_score_min?: number;
-  toxicity_score_max?: number;
   ko_count_min?: number;
   ko_count_max?: number;
   gene_count_min?: number;
@@ -87,6 +139,32 @@ export interface ToxicityEndpoint {
   label: string | null;
   value: number | null;
   updated_at: string;
+}
+
+export interface CompoundGeneCardRow {
+  cpd: string;
+  ko: string;
+  genesymbol: string;
+  genename: string;
+  enzyme_activity: string;
+  ec: string;
+  reaction_descriptions: string[];
+  reaction_descriptions_total: number;
+  supporting_rows: number;
+  updated_at: string;
+}
+
+export interface CompoundPathwayCardRow {
+  cpd: string;
+  source: 'HADEG' | 'KEGG' | 'COMPOUND_PATHWAY' | string;
+  pathway: string;
+  supporting_rows: number;
+  updated_at: string;
+}
+
+export interface PathwayOption {
+  pathway: string;
+  source: string;
 }
 
 export interface ToxicityFilters {

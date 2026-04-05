@@ -4,7 +4,7 @@ import type {
   AssetMetadataResponse,
   IntegratedTableIndexRow,
   NetworkGraphData,
-  SankeyDatum,
+  SankeyData,
   ToxicityMatrixRow,
 } from '../types/assets';
 
@@ -58,8 +58,8 @@ export function getNetworkGraphAsset(): Promise<NetworkGraphData> {
   return fetchAsset<NetworkGraphData>('network_graph.json');
 }
 
-export function getSankeyDataAsset(): Promise<SankeyDatum[]> {
-  return fetchAsset<SankeyDatum[]>('sankey_data.json');
+export function getSankeyDataAsset(): Promise<SankeyData> {
+  return fetchAsset<SankeyData>('sankey_data.json');
 }
 
 export function getIntegratedTableIndexAsset(): Promise<IntegratedTableIndexRow[]> {

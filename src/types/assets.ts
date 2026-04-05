@@ -2,6 +2,13 @@ import type { CompoundSummary, GeneSummary, IntegratedData, PathwaySummary, Toxi
 
 export interface ToxicityMatrixRow extends ToxicityEndpoint {}
 
+export type VisualizationChartId =
+  | 'compound_ranking_bar'
+  | 'compound_pathway_heatmap'
+  | 'network_graph'
+  | 'sankey_flow'
+  | 'toxicity_radar';
+
 export interface NetworkGraphNode {
   id: string;
   label: string;
@@ -19,12 +26,22 @@ export interface NetworkGraphData {
   edges: NetworkGraphEdge[];
 }
 
-export interface SankeyDatum {
-  ko: string;
-  cpd: string;
-  endpoint: string;
-  label: string | null;
-  value: number | null;
+export interface SankeyNode {
+  id: string;
+  label: string;
+  type: 'ko' | 'compound' | 'toxicity';
+}
+
+export interface SankeyLink {
+  source: string;
+  target: string;
+  value: number;
+  kind: 'ko_to_compound' | 'compound_to_toxicity';
+}
+
+export interface SankeyData {
+  nodes: SankeyNode[];
+  links: SankeyLink[];
 }
 
 export interface IntegratedTableIndexRow {
@@ -63,6 +80,11 @@ export interface AssetManifest {
     directory: string;
     count: number;
   };
+  toxicity_risk_mean?: {
+    source: 'derived';
+    formula: string;
+    missing_policy: 'null' | string;
+  };
   phases: {
     phase_1: string[];
     phase_2: string[];
@@ -84,5 +106,5 @@ export type AssetCatalog = {
   pathway_summary: PathwaySummary[];
   toxicity_matrix: ToxicityMatrixRow[];
   network_graph: NetworkGraphData;
-  sankey_data: SankeyDatum[];
+  sankey_data: SankeyData;
 };
