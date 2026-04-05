@@ -1,7 +1,21 @@
 import { useState, useEffect } from 'react';
 import { X, ArrowLeft } from 'lucide-react';
-import { getCompoundById, getCompoundDetails } from '../services/api';
-import type { CompoundSummary, IntegratedData } from '../types/database';
+import {
+  getCompoundById,
+  getCompoundMetadata,
+  getCompoundGenes,
+  getCompoundPathways,
+  getCompoundToxicityProfile,
+} from '../services/api';
+import type {
+  CompoundMetadata,
+  CompoundSummary,
+  CompoundGeneCardRow,
+  CompoundPathwayCardRow,
+  ToxicityEndpoint,
+} from '../types/database';
+import { Pagination } from './Pagination';
+import { CompoundMetadataPanel } from './CompoundMetadataPanel';
 
 interface CompoundDetailProps {
   cpd: string;
@@ -10,27 +24,60 @@ interface CompoundDetailProps {
 
 export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
   const [summary, setSummary] = useState<CompoundSummary | null>(null);
-  const [details, setDetails] = useState<IntegratedData[]>([]);
+  const [metadata, setMetadata] = useState<CompoundMetadata | null>(null);
+  const [geneRows, setGeneRows] = useState<CompoundGeneCardRow[]>([]);
+  const [pathwayRows, setPathwayRows] = useState<CompoundPathwayCardRow[]>([]);
+  const [toxicityRows, setToxicityRows] = useState<ToxicityEndpoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [genesLoading, setGenesLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'genes' | 'pathways' | 'toxicity'>('genes');
+  const [genePage, setGenePage] = useState(1);
+  const [geneTotalPages, setGeneTotalPages] = useState(1);
+  const [genePageSize] = useState(25);
 
   useEffect(() => {
-    loadData();
+    setGenePage(1);
   }, [cpd]);
 
-  async function loadData() {
+  useEffect(() => {
+    loadCompoundContext();
+  }, [cpd]);
+
+  useEffect(() => {
+    loadGenesPage();
+  }, [cpd, genePage]);
+
+  async function loadCompoundContext() {
     setLoading(true);
     try {
-      const [summaryData, detailsData] = await Promise.all([
+      const [summaryData, metadataData, pathwaysData, toxicityData] = await Promise.all([
         getCompoundById(cpd),
-        getCompoundDetails(cpd),
+        getCompoundMetadata(cpd),
+        getCompoundPathways(cpd, { page: 1, pageSize: 1000 }),
+        getCompoundToxicityProfile(cpd, { page: 1, pageSize: 200 }),
       ]);
+
       setSummary(summaryData);
-      setDetails(detailsData);
+      setMetadata(metadataData);
+      setPathwayRows(pathwaysData.data);
+      setToxicityRows(toxicityData.data);
     } catch (error) {
       console.error('Error loading compound details:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadGenesPage() {
+    setGenesLoading(true);
+    try {
+      const genesData = await getCompoundGenes(cpd, { page: genePage, pageSize: genePageSize });
+      setGeneRows(genesData.data);
+      setGeneTotalPages(genesData.totalPages);
+    } catch (error) {
+      console.error('Error loading compound genes:', error);
+    } finally {
+      setGenesLoading(false);
     }
   }
 
@@ -57,10 +104,19 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
     );
   }
 
-  const uniqueGenes = Array.from(new Set(details.map(d => d.genesymbol).filter(Boolean)));
-  const uniquePathwaysHADEG = Array.from(new Set(details.map(d => d.pathway_hadeg).filter(Boolean)));
-  const uniquePathwaysKEGG = Array.from(new Set(details.map(d => d.pathway_kegg).filter(Boolean)));
-  const toxicityData = details[0];
+  const pathwaysBySource = pathwayRows.reduce(
+    (acc, row) => {
+      acc[row.source] = acc[row.source] || [];
+      acc[row.source].push(row);
+      return acc;
+    },
+    {} as Record<string, CompoundPathwayCardRow[]>
+  );
+
+  const hadegPathways = pathwaysBySource.HADEG || [];
+  const keggPathways = pathwaysBySource.KEGG || [];
+  const compoundPathways = pathwaysBySource.COMPOUND_PATHWAY || [];
+  const totalPathways = pathwayRows.length;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -109,8 +165,10 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
               <p className="font-medium">{summary.pathway_count}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Toxicity Score</p>
-              <p className="font-medium">{summary.toxicity_score.toFixed(2)}</p>
+              <p className="text-sm text-gray-500">Toxicity Risk Mean</p>
+              <p className="font-medium">
+                {summary.toxicity_risk_mean == null ? '-' : summary.toxicity_risk_mean.toFixed(2)}
+              </p>
             </div>
             {summary.smiles && (
               <div className="col-span-2">
@@ -120,6 +178,8 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
             )}
           </div>
         </div>
+
+        {metadata && <CompoundMetadataPanel metadata={metadata} />}
 
         <div className="border-b border-gray-200">
           <div className="flex gap-4 px-6">
@@ -131,7 +191,7 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Associated Genes ({uniqueGenes.length})
+              Associated Genes ({summary.gene_count})
             </button>
             <button
               onClick={() => setActiveTab('pathways')}
@@ -141,7 +201,7 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Pathways ({uniquePathwaysHADEG.length + uniquePathwaysKEGG.length})
+              Pathways ({totalPathways})
             </button>
             <button
               onClick={() => setActiveTab('toxicity')}
@@ -151,7 +211,7 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Toxicity Profile
+              Toxicity Profile ({toxicityRows.length})
             </button>
           </div>
         </div>
@@ -159,6 +219,12 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
         <div className="p-6 max-h-96 overflow-y-auto">
           {activeTab === 'genes' && (
             <div className="space-y-4">
+              {genesLoading ? (
+                <p className="text-gray-500 text-center py-4">Loading gene data...</p>
+              ) : geneRows.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No gene data available</p>
+              ) : (
+                <>
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -170,8 +236,8 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {details.map((detail, idx) => (
-                    <tr key={idx}>
+                  {geneRows.map((detail, idx) => (
+                    <tr key={`${detail.ko}-${detail.genesymbol}-${idx}`}>
                       <td className="px-4 py-2 text-sm font-mono">{detail.ko || '-'}</td>
                       <td className="px-4 py-2 text-sm font-medium">{detail.genesymbol || '-'}</td>
                       <td className="px-4 py-2 text-sm">{detail.genename || '-'}</td>
@@ -181,36 +247,57 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
                   ))}
                 </tbody>
               </table>
+              {geneTotalPages > 1 && (
+                <Pagination
+                  currentPage={genePage}
+                  totalPages={geneTotalPages}
+                  onPageChange={setGenePage}
+                />
+              )}
+              </>
+              )}
             </div>
           )}
 
           {activeTab === 'pathways' && (
             <div className="space-y-6">
-              {uniquePathwaysHADEG.length > 0 && (
+              {hadegPathways.length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold mb-3">HADEG Pathways</h3>
                   <ul className="space-y-2">
-                    {uniquePathwaysHADEG.map((pathway, idx) => (
-                      <li key={idx} className="px-4 py-2 bg-blue-50 rounded-lg">
-                        {pathway}
+                    {hadegPathways.map((pathway, idx) => (
+                      <li key={`${pathway.pathway}-${idx}`} className="px-4 py-2 bg-blue-50 rounded-lg">
+                        {pathway.pathway}
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
-              {uniquePathwaysKEGG.length > 0 && (
+              {keggPathways.length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold mb-3">KEGG Pathways</h3>
                   <ul className="space-y-2">
-                    {uniquePathwaysKEGG.map((pathway, idx) => (
-                      <li key={idx} className="px-4 py-2 bg-green-50 rounded-lg">
-                        {pathway}
+                    {keggPathways.map((pathway, idx) => (
+                      <li key={`${pathway.pathway}-${idx}`} className="px-4 py-2 bg-green-50 rounded-lg">
+                        {pathway.pathway}
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
-              {uniquePathwaysHADEG.length === 0 && uniquePathwaysKEGG.length === 0 && (
+              {compoundPathways.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Compound Pathways</h3>
+                  <ul className="space-y-2">
+                    {compoundPathways.map((pathway, idx) => (
+                      <li key={`${pathway.pathway}-${idx}`} className="px-4 py-2 bg-gray-100 rounded-lg">
+                        {pathway.pathway}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {totalPathways === 0 && (
                 <p className="text-gray-500 text-center py-4">No pathway data available</p>
               )}
             </div>
@@ -218,31 +305,27 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
 
           {activeTab === 'toxicity' && (
             <div className="space-y-6">
-              {toxicityData && Object.keys(toxicityData.toxicity_labels).length > 0 ? (
-                <>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3">Toxicity Labels</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {Object.entries(toxicityData.toxicity_labels).map(([key, value]) => (
-                        <div key={key} className="px-4 py-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-600">{key.replace('label_', '')}</p>
-                          <p className="font-medium">{String(value)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3">Toxicity Values</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {Object.entries(toxicityData.toxicity_values).map(([key, value]) => (
-                        <div key={key} className="px-4 py-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-600">{key.replace('value_', '')}</p>
-                          <p className="font-medium">{String(value)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
+              {toxicityRows.length > 0 ? (
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Endpoint</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Label</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {toxicityRows.map((row) => (
+                      <tr key={row.endpoint}>
+                        <td className="px-4 py-2 text-sm">{row.endpoint}</td>
+                        <td className="px-4 py-2 text-sm">{row.label || '-'}</td>
+                        <td className="px-4 py-2 text-sm">
+                          {row.value === null ? '-' : row.value.toFixed(4)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               ) : (
                 <p className="text-gray-500 text-center py-4">No toxicity data available</p>
               )}
