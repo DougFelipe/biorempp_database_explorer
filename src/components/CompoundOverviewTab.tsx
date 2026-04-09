@@ -3,7 +3,6 @@ import type { CompoundOverviewResponse } from '../types/database';
 import { getCompoundOverview } from '../services/api';
 import { KoBarOverview } from './compound-overview/KoBarOverview';
 import { PathwayTopOverview } from './compound-overview/PathwayTopOverview';
-import { PathwayCoverageOverview } from './compound-overview/PathwayCoverageOverview';
 import { ToxicityHeatmapOverview } from './compound-overview/ToxicityHeatmapOverview';
 
 interface CompoundOverviewTabProps {
@@ -69,7 +68,6 @@ export function CompoundOverviewTab({ cpd }: CompoundOverviewTabProps) {
         <PathwayTopOverview title="Top KEGG Pathways" rows={overview.pathways_top_kegg} />
         <PathwayTopOverview title="Top HADEG Pathways" rows={overview.pathways_top_hadeg} />
       </div>
-      <PathwayCoverageOverview matrix={overview.pathway_coverage} />
       <ToxicityHeatmapOverview rows={overview.toxicity_heatmap} />
     </div>
   );
