@@ -1,26 +1,3 @@
-export interface IntegratedData {
-  id: number;
-  ko: string | null;
-  genesymbol: string | null;
-  genename: string | null;
-  enzyme_activity: string | null;
-  ec: string | null;
-  reaction: string | null;
-  reaction_description: string | null;
-  cpd: string | null;
-  compoundname: string | null;
-  compoundclass: string | null;
-  reference_ag: string | null;
-  pathway_hadeg: string | null;
-  pathway_kegg: string | null;
-  compound_pathway: string | null;
-  smiles: string | null;
-  chebi: string | null;
-  toxicity_labels: Record<string, unknown>;
-  toxicity_values: Record<string, unknown>;
-  created_at: string;
-}
-
 export interface CompoundSummary {
   cpd: string;
   compoundname: string | null;
@@ -54,6 +31,8 @@ export interface CompoundOverviewSummary {
 export interface KoBarDatum {
   ko: string;
   count: number;
+  relation_count_hadeg: number;
+  relation_count_kegg: number;
 }
 
 export interface PathwayTopDatum {
@@ -92,8 +71,15 @@ export interface CompoundOverviewResponse {
   };
   summary: CompoundOverviewSummary;
   ko_bar: KoBarDatum[];
-  pathways_top: PathwayTopDatum[];
+  pathways_top_kegg: PathwayTopDatum[];
+  pathways_top_hadeg: PathwayTopDatum[];
   pathway_coverage: PathwayCoverageMatrix;
+  metric_basis: {
+    ko_bar: string;
+    pathways_top_kegg: string;
+    pathways_top_hadeg: string;
+    pathway_coverage_weight: string;
+  };
   toxicity_heatmap: ToxicityHeatmapDatum[];
 }
 

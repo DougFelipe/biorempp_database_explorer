@@ -9,6 +9,7 @@ COPY . .
 
 RUN npm run ingest:sqlite
 RUN npm run export:assets
+RUN npm run check:footprint
 RUN npm run build
 
 

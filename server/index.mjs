@@ -23,6 +23,39 @@ const db = new Database(SQLITE_DB_PATH, {
   readonly: true,
   fileMustExist: true,
 });
+
+const REQUIRED_RUNTIME_TABLES = [
+  'compound_summary',
+  'gene_summary',
+  'pathway_summary',
+  'toxicity_endpoint',
+  'compound_gene_map',
+  'compound_pathway_map',
+  'compound_reference_map',
+  'compound_metadata',
+  'compound_gene_card',
+  'compound_pathway_card',
+  'compound_ko_pathway_rel',
+  'compound_ko_overview',
+];
+
+const availableTables = new Set(
+  db
+    .prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+    `)
+    .all()
+    .map((row) => row.name)
+);
+const missingTables = REQUIRED_RUNTIME_TABLES.filter((tableName) => !availableTables.has(tableName));
+if (missingTables.length > 0) {
+  throw new Error(
+    `SQLite runtime profile is invalid. Missing required tables: ${missingTables.join(', ')}. Run "npm run ingest:sqlite".`
+  );
+}
+
 const hasCompoundMetadataTable = Boolean(
   db
     .prepare(`
@@ -398,19 +431,19 @@ app.get('/api/compounds/:cpd/overview', (req, res, next) => {
         `
           SELECT
             ko,
-            COUNT(*) AS count
-          FROM compound_gene_card
+            relation_count_total AS count,
+            relation_count_hadeg,
+            relation_count_kegg
+          FROM compound_ko_overview
           WHERE cpd = ?
-            AND ko IS NOT NULL
-            AND ko != ''
-          GROUP BY ko
-          ORDER BY count DESC, ko ASC
+            AND relation_count_total > 0
+          ORDER BY relation_count_total DESC, relation_count_hadeg DESC, relation_count_kegg DESC, ko ASC
           LIMIT ?
         `
       )
       .all(cpd, topKo);
 
-    const pathwaysTop = db
+    const pathwaysTopKegg = db
       .prepare(
         `
           SELECT
@@ -419,7 +452,24 @@ app.get('/api/compounds/:cpd/overview', (req, res, next) => {
             supporting_rows
           FROM compound_pathway_card
           WHERE cpd = ?
-          ORDER BY supporting_rows DESC, source ASC, pathway ASC
+            AND source = 'KEGG'
+          ORDER BY supporting_rows DESC, pathway ASC
+          LIMIT ?
+        `
+      )
+      .all(cpd, topPathways);
+
+    const pathwaysTopHadeg = db
+      .prepare(
+        `
+          SELECT
+            source,
+            pathway,
+            supporting_rows
+          FROM compound_pathway_card
+          WHERE cpd = ?
+            AND source = 'HADEG'
+          ORDER BY supporting_rows DESC, pathway ASC
           LIMIT ?
         `
       )
@@ -434,6 +484,7 @@ app.get('/api/compounds/:cpd/overview', (req, res, next) => {
             supporting_rows
           FROM compound_pathway_card
           WHERE cpd = ?
+            AND source IN ('KEGG', 'HADEG')
           ORDER BY source ASC, pathway ASC
         `
       )
@@ -468,7 +519,7 @@ app.get('/api/compounds/:cpd/overview', (req, res, next) => {
       .slice(0, topPathways)
       .map(([pathway]) => pathway);
 
-    const sourcePriority = ['HADEG', 'KEGG', 'COMPOUND_PATHWAY'];
+    const sourcePriority = ['KEGG', 'HADEG'];
     const sources = [...new Set(pathwaysAll.map((row) => row.source))].sort((a, b) => {
       const ai = sourcePriority.indexOf(a);
       const bi = sourcePriority.indexOf(b);
@@ -514,8 +565,15 @@ app.get('/api/compounds/:cpd/overview', (req, res, next) => {
       ko_bar: koBar.map((row) => ({
         ko: row.ko,
         count: Number(row.count) || 0,
+        relation_count_hadeg: Number(row.relation_count_hadeg) || 0,
+        relation_count_kegg: Number(row.relation_count_kegg) || 0,
       })),
-      pathways_top: pathwaysTop.map((row) => ({
+      pathways_top_kegg: pathwaysTopKegg.map((row) => ({
+        source: row.source,
+        pathway: row.pathway,
+        supporting_rows: Number(row.supporting_rows) || 0,
+      })),
+      pathways_top_hadeg: pathwaysTopHadeg.map((row) => ({
         source: row.source,
         pathway: row.pathway,
         supporting_rows: Number(row.supporting_rows) || 0,
@@ -524,6 +582,12 @@ app.get('/api/compounds/:cpd/overview', (req, res, next) => {
         sources,
         pathways: selectedPathways,
         cells: pathwayCoverageCells,
+      },
+      metric_basis: {
+        ko_bar: 'distinct(cpd,ko,source,pathway)',
+        pathways_top_kegg: 'distinct(cpd,ko,source,pathway)',
+        pathways_top_hadeg: 'distinct(cpd,ko,source,pathway)',
+        pathway_coverage_weight: 'distinct(cpd,ko,source,pathway)',
       },
       toxicity_heatmap: toxicityHeatmap.map((row) => ({
         endpoint: row.endpoint,
@@ -597,48 +661,6 @@ app.get('/api/compounds/:cpd/metadata', (req, res, next) => {
         ...(parsed.data_quality && typeof parsed.data_quality === 'object' ? parsed.data_quality : {}),
       },
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get('/api/compounds/:cpd/details', (req, res, next) => {
-  try {
-    const rows = db
-      .prepare(`
-        SELECT
-          id,
-          ko,
-          genesymbol,
-          genename,
-          enzyme_activity,
-          ec,
-          reaction,
-          reaction_description,
-          cpd,
-          compoundname,
-          compoundclass,
-          reference_ag,
-          pathway_hadeg,
-          pathway_kegg,
-          compound_pathway,
-          smiles,
-          chebi,
-          toxicity_labels,
-          toxicity_values,
-          created_at
-        FROM integrated_table
-        WHERE cpd = ?
-        ORDER BY genesymbol ASC, ko ASC
-      `)
-      .all(req.params.cpd)
-      .map((row) => ({
-        ...row,
-        toxicity_labels: parseJsonObject(row.toxicity_labels),
-        toxicity_values: parseJsonObject(row.toxicity_values),
-      }));
-
-    res.json(rows);
   } catch (error) {
     next(error);
   }

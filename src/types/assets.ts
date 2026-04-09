@@ -1,4 +1,4 @@
-import type { CompoundSummary, GeneSummary, IntegratedData, PathwaySummary, ToxicityEndpoint } from './database';
+import type { CompoundSummary, GeneSummary, PathwaySummary, ToxicityEndpoint } from './database';
 
 export interface ToxicityMatrixRow extends ToxicityEndpoint {}
 
@@ -44,13 +44,6 @@ export interface SankeyData {
   links: SankeyLink[];
 }
 
-export interface IntegratedTableIndexRow {
-  cpd: string;
-  compoundname: string | null;
-  row_count: number;
-  file: string;
-}
-
 export interface AssetEntry {
   path: string;
   bytes: number;
@@ -61,9 +54,9 @@ export interface AssetManifest {
   version: string;
   generated_at: string;
   source_db: string;
-  include_integrated_full: boolean;
+  runtime_profile?: 'lean' | string;
+  include_integrated_full?: boolean;
   counts: {
-    integrated_rows: number;
     compounds: number;
     genes: number;
     pathways: number;
@@ -72,14 +65,8 @@ export interface AssetManifest {
     toxicity_endpoints: number;
     invalid_ko: number;
     invalid_cpd: number;
-    integrated_shards: number;
   };
   assets: AssetEntry[];
-  integrated_shards: {
-    index_file: string;
-    directory: string;
-    count: number;
-  };
   toxicity_risk_mean?: {
     source: 'derived';
     formula: string;
@@ -97,8 +84,6 @@ export interface AssetMetadataResponse {
   basePath: string;
   manifest?: AssetManifest;
 }
-
-export type IntegratedTableShard = IntegratedData[];
 
 export type AssetCatalog = {
   compound_summary: CompoundSummary[];

@@ -4,7 +4,6 @@ import type {
   CompoundMetadata,
   GeneSummary,
   PathwaySummary,
-  IntegratedData,
   ToxicityEndpoint,
   CompoundGeneCardRow,
   CompoundPathwayCardRow,
@@ -69,10 +68,6 @@ export async function getCompoundOverview(
       top_pathways: options.top_pathways,
     })}`
   );
-}
-
-export async function getCompoundDetails(cpd: string): Promise<IntegratedData[]> {
-  return fetchJson(`/api/compounds/${encodeURIComponent(cpd)}/details`);
 }
 
 export async function getCompoundGenes(

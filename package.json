@@ -17,6 +17,7 @@
     "ingest:sqlite": "node scripts/ingest-sqlite.mjs",
     "export:assets": "node scripts/export-assets.mjs",
     "export:assets:full": "node scripts/export-assets.mjs --with-full",
+    "check:footprint": "node scripts/check-runtime-footprint.mjs",
     "ingest:data": "npm run ingest:sqlite",
     "start": "node server/index.mjs"
   },

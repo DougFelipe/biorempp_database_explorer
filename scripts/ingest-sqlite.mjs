@@ -314,7 +314,53 @@ function buildSummaries(
   const geneAcc = new Map();
   const pathwayAcc = new Map();
   const geneCardAcc = new Map();
-  const pathwayCardAcc = new Map();
+  const koPathwayRelAcc = new Map();
+  const pathwayKoSupportAcc = new Map();
+  const koOverviewAcc = new Map();
+
+  function ensureKoOverview(cpd, ko) {
+    const key = `${cpd}|${ko}`;
+    if (!koOverviewAcc.has(key)) {
+      koOverviewAcc.set(key, {
+        cpd,
+        ko,
+        hadegPathways: new Set(),
+        keggPathways: new Set(),
+      });
+    }
+    return koOverviewAcc.get(key);
+  }
+
+  function addKoPathwayRelation(cpd, ko, source, pathway) {
+    if (!pathway) {
+      return;
+    }
+
+    const relKey = `${cpd}|${ko}|${source}|${pathway}`;
+    if (!koPathwayRelAcc.has(relKey)) {
+      koPathwayRelAcc.set(relKey, { cpd, ko, source, pathway });
+    }
+
+    if (source === 'HADEG' || source === 'KEGG') {
+      const overview = ensureKoOverview(cpd, ko);
+      if (source === 'HADEG') {
+        overview.hadegPathways.add(pathway);
+      } else if (source === 'KEGG') {
+        overview.keggPathways.add(pathway);
+      }
+    }
+
+    const cardKey = `${cpd}|${source}|${pathway}`;
+    if (!pathwayKoSupportAcc.has(cardKey)) {
+      pathwayKoSupportAcc.set(cardKey, {
+        cpd,
+        source,
+        pathway,
+        koSet: new Set(),
+      });
+    }
+    pathwayKoSupportAcc.get(cardKey).koSet.add(ko);
+  }
 
   for (const row of bioremppRows) {
     if (!compoundAcc.has(row.cpd)) {
@@ -339,6 +385,8 @@ function buildSummaries(
     }
 
     const compound = compoundAcc.get(row.cpd);
+    ensureKoOverview(row.cpd, row.ko);
+
     if (!compound.compoundname) {
       compound.compoundname = row.compoundname;
     }
@@ -373,9 +421,6 @@ function buildSummaries(
     if (keggMatches.length > 0) {
       compound.sourceSet.add('KEGG');
     }
-    const hadegMultiplier = Math.max(1, hadegMatches.length);
-    const keggMultiplier = Math.max(1, keggMatches.length);
-    const joinMultiplier = hadegMultiplier * keggMultiplier;
 
     const geneCardKey = [
       row.cpd,
@@ -401,7 +446,7 @@ function buildSummaries(
     }
 
     const geneCard = geneCardAcc.get(geneCardKey);
-    geneCard.supporting_rows += joinMultiplier;
+    geneCard.supporting_rows += 1;
     if (row.reaction) {
       geneCard.reactionSet.add(row.reaction);
     }
@@ -414,33 +459,13 @@ function buildSummaries(
         compound.pathwayCountSet.add(`HADEG|${hadeg.pathway_hadeg}`);
         compound.pathwayFilterSet.add(hadeg.pathway_hadeg);
         compound.pathwayHadegSet.add(hadeg.pathway_hadeg);
-
-        const key = `${row.cpd}|HADEG|${hadeg.pathway_hadeg}`;
-        if (!pathwayCardAcc.has(key)) {
-          pathwayCardAcc.set(key, {
-            cpd: row.cpd,
-            source: 'HADEG',
-            pathway: hadeg.pathway_hadeg,
-            supporting_rows: 0,
-          });
-        }
-        pathwayCardAcc.get(key).supporting_rows += keggMultiplier;
+        addKoPathwayRelation(row.cpd, row.ko, 'HADEG', hadeg.pathway_hadeg);
       }
       if (hadeg.compound_pathway) {
         compound.pathwayCountSet.add(`COMPOUND_PATHWAY|${hadeg.compound_pathway}`);
         compound.pathwayFilterSet.add(hadeg.compound_pathway);
         compound.compoundPathwayClassSet.add(hadeg.compound_pathway);
-
-        const key = `${row.cpd}|COMPOUND_PATHWAY|${hadeg.compound_pathway}`;
-        if (!pathwayCardAcc.has(key)) {
-          pathwayCardAcc.set(key, {
-            cpd: row.cpd,
-            source: 'COMPOUND_PATHWAY',
-            pathway: hadeg.compound_pathway,
-            supporting_rows: 0,
-          });
-        }
-        pathwayCardAcc.get(key).supporting_rows += keggMultiplier;
+        addKoPathwayRelation(row.cpd, row.ko, 'COMPOUND_PATHWAY', hadeg.compound_pathway);
       }
     }
 
@@ -449,17 +474,7 @@ function buildSummaries(
         compound.pathwayCountSet.add(`KEGG|${kegg.pathway_kegg}`);
         compound.pathwayFilterSet.add(kegg.pathway_kegg);
         compound.pathwayKeggSet.add(kegg.pathway_kegg);
-
-        const key = `${row.cpd}|KEGG|${kegg.pathway_kegg}`;
-        if (!pathwayCardAcc.has(key)) {
-          pathwayCardAcc.set(key, {
-            cpd: row.cpd,
-            source: 'KEGG',
-            pathway: kegg.pathway_kegg,
-            supporting_rows: 0,
-          });
-        }
-        pathwayCardAcc.get(key).supporting_rows += hadegMultiplier;
+        addKoPathwayRelation(row.cpd, row.ko, 'KEGG', kegg.pathway_kegg);
       }
     }
 
@@ -722,6 +737,8 @@ function buildSummaries(
   const toxicityEndpointRows = [];
   const compoundGeneCardRows = [];
   const compoundPathwayCardRows = [];
+  const compoundKoPathwayRelRows = [];
+  const compoundKoOverviewRows = [];
 
   for (const card of geneCardAcc.values()) {
     compoundGeneCardRows.push({
@@ -737,12 +754,33 @@ function buildSummaries(
     });
   }
 
-  for (const pathwayCard of pathwayCardAcc.values()) {
+  for (const pathwayCard of pathwayKoSupportAcc.values()) {
     compoundPathwayCardRows.push({
       cpd: pathwayCard.cpd,
       source: pathwayCard.source,
       pathway: pathwayCard.pathway,
-      supporting_rows: pathwayCard.supporting_rows,
+      supporting_rows: pathwayCard.koSet.size,
+    });
+  }
+
+  for (const relation of koPathwayRelAcc.values()) {
+    compoundKoPathwayRelRows.push({
+      cpd: relation.cpd,
+      ko: relation.ko,
+      source: relation.source,
+      pathway: relation.pathway,
+    });
+  }
+
+  for (const overview of koOverviewAcc.values()) {
+    const relationCountHadeg = overview.hadegPathways.size;
+    const relationCountKegg = overview.keggPathways.size;
+    compoundKoOverviewRows.push({
+      cpd: overview.cpd,
+      ko: overview.ko,
+      relation_count_total: relationCountHadeg + relationCountKegg,
+      relation_count_hadeg: relationCountHadeg,
+      relation_count_kegg: relationCountKegg,
     });
   }
 
@@ -775,6 +813,8 @@ function buildSummaries(
     toxicityEndpointRows,
     compoundGeneCardRows,
     compoundPathwayCardRows,
+    compoundKoPathwayRelRows,
+    compoundKoOverviewRows,
   };
 }
 
@@ -796,29 +836,6 @@ function createSchema(db) {
     PRAGMA journal_mode = DELETE;
     PRAGMA synchronous = NORMAL;
     PRAGMA foreign_keys = OFF;
-
-    CREATE TABLE integrated_table (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ko TEXT CHECK (ko IS NULL OR ko GLOB 'K[0-9][0-9][0-9][0-9][0-9]'),
-      genesymbol TEXT,
-      genename TEXT,
-      enzyme_activity TEXT,
-      ec TEXT,
-      reaction TEXT,
-      reaction_description TEXT,
-      cpd TEXT CHECK (cpd IS NULL OR cpd GLOB 'C[0-9][0-9][0-9][0-9][0-9]'),
-      compoundname TEXT,
-      compoundclass TEXT,
-      reference_ag TEXT,
-      pathway_hadeg TEXT,
-      pathway_kegg TEXT,
-      compound_pathway TEXT,
-      smiles TEXT,
-      chebi TEXT,
-      toxicity_labels TEXT NOT NULL DEFAULT '{}',
-      toxicity_values TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
 
     CREATE TABLE compound_summary (
       cpd TEXT PRIMARY KEY CHECK (cpd GLOB 'C[0-9][0-9][0-9][0-9][0-9]'),
@@ -914,20 +931,30 @@ function createSchema(db) {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (cpd, source, pathway)
     );
+
+    CREATE TABLE compound_ko_pathway_rel (
+      cpd TEXT NOT NULL CHECK (cpd GLOB 'C[0-9][0-9][0-9][0-9][0-9]'),
+      ko TEXT NOT NULL CHECK (ko GLOB 'K[0-9][0-9][0-9][0-9][0-9]'),
+      source TEXT NOT NULL,
+      pathway TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (cpd, ko, source, pathway)
+    );
+
+    CREATE TABLE compound_ko_overview (
+      cpd TEXT NOT NULL CHECK (cpd GLOB 'C[0-9][0-9][0-9][0-9][0-9]'),
+      ko TEXT NOT NULL CHECK (ko GLOB 'K[0-9][0-9][0-9][0-9][0-9]'),
+      relation_count_total INTEGER NOT NULL DEFAULT 0,
+      relation_count_hadeg INTEGER NOT NULL DEFAULT 0,
+      relation_count_kegg INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (cpd, ko)
+    );
   `);
 }
 
 function createIndexes(db) {
   db.exec(`
-    CREATE INDEX idx_integrated_ko ON integrated_table(ko);
-    CREATE INDEX idx_integrated_cpd ON integrated_table(cpd);
-    CREATE INDEX idx_integrated_compoundclass ON integrated_table(compoundclass);
-    CREATE INDEX idx_integrated_genesymbol ON integrated_table(genesymbol);
-    CREATE INDEX idx_integrated_pathway_hadeg ON integrated_table(pathway_hadeg);
-    CREATE INDEX idx_integrated_pathway_kegg ON integrated_table(pathway_kegg);
-    CREATE INDEX idx_integrated_compound_pathway ON integrated_table(compound_pathway);
-    CREATE INDEX idx_integrated_compoundname ON integrated_table(compoundname);
-
     CREATE INDEX idx_compound_summary_class ON compound_summary(compoundclass);
     CREATE INDEX idx_compound_summary_reference ON compound_summary(reference_ag);
     CREATE INDEX idx_compound_summary_reference_count ON compound_summary(reference_count);
@@ -961,19 +988,18 @@ function createIndexes(db) {
     CREATE INDEX idx_compound_pathway_card_cpd ON compound_pathway_card(cpd);
     CREATE INDEX idx_compound_pathway_card_source ON compound_pathway_card(source);
     CREATE INDEX idx_compound_pathway_card_pathway ON compound_pathway_card(pathway);
+
+    CREATE INDEX idx_compound_ko_pathway_rel_cpd ON compound_ko_pathway_rel(cpd);
+    CREATE INDEX idx_compound_ko_pathway_rel_ko ON compound_ko_pathway_rel(ko);
+    CREATE INDEX idx_compound_ko_pathway_rel_source_pathway ON compound_ko_pathway_rel(source, pathway);
+
+    CREATE INDEX idx_compound_ko_overview_cpd ON compound_ko_overview(cpd);
+    CREATE INDEX idx_compound_ko_overview_ko ON compound_ko_overview(ko);
+    CREATE INDEX idx_compound_ko_overview_total ON compound_ko_overview(relation_count_total);
   `);
 }
 
-function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summaries) {
-  const insertIntegrated = db.prepare(`
-    INSERT INTO integrated_table (
-      ko, genesymbol, genename, enzyme_activity, ec, reaction, reaction_description,
-      cpd, compoundname, compoundclass, reference_ag,
-      pathway_hadeg, pathway_kegg, compound_pathway,
-      smiles, chebi, toxicity_labels, toxicity_values
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
+function ingestToSqlite(db, summaries) {
   const insertCompound = db.prepare(`
     INSERT INTO compound_summary (
       cpd, compoundname, compoundclass, reference_ag, reference_count, ko_count, gene_count,
@@ -1027,43 +1053,19 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
     ) VALUES (?, ?, ?, ?)
   `);
 
-  let integratedInserted = 0;
+  const insertCompoundKoPathwayRel = db.prepare(`
+    INSERT INTO compound_ko_pathway_rel (
+      cpd, ko, source, pathway
+    ) VALUES (?, ?, ?, ?)
+  `);
+
+  const insertCompoundKoOverview = db.prepare(`
+    INSERT INTO compound_ko_overview (
+      cpd, ko, relation_count_total, relation_count_hadeg, relation_count_kegg
+    ) VALUES (?, ?, ?, ?, ?)
+  `);
 
   const transaction = db.transaction(() => {
-    for (const row of bioremppRows) {
-      const hadegMatches = hadegByKo.get(row.ko) ?? [null];
-      const keggMatches = keggByKo.get(row.ko) ?? [null];
-      const tox = toxByCpd.get(row.cpd);
-      const toxicityLabels = JSON.stringify(tox?.toxicity_labels ?? {});
-      const toxicityValues = JSON.stringify(tox?.toxicity_values ?? {});
-
-      for (const hadeg of hadegMatches) {
-        for (const kegg of keggMatches) {
-          insertIntegrated.run(
-            row.ko,
-            row.genesymbol,
-            row.genename,
-            row.enzyme_activity,
-            row.ec,
-            row.reaction,
-            row.reaction_description,
-            row.cpd,
-            row.compoundname ?? tox?.compoundname ?? null,
-            row.compoundclass,
-            row.reference_ag,
-            hadeg?.pathway_hadeg ?? null,
-            kegg?.pathway_kegg ?? null,
-            hadeg?.compound_pathway ?? null,
-            tox?.smiles ?? null,
-            tox?.chebi ?? null,
-            toxicityLabels,
-            toxicityValues
-          );
-          integratedInserted += 1;
-        }
-      }
-    }
-
     for (const row of summaries.compoundRows) {
       insertCompound.run(
         row.cpd,
@@ -1152,12 +1154,30 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
         row.supporting_rows
       );
     }
+
+    for (const row of summaries.compoundKoPathwayRelRows) {
+      insertCompoundKoPathwayRel.run(
+        row.cpd,
+        row.ko,
+        row.source,
+        row.pathway
+      );
+    }
+
+    for (const row of summaries.compoundKoOverviewRows) {
+      insertCompoundKoOverview.run(
+        row.cpd,
+        row.ko,
+        row.relation_count_total,
+        row.relation_count_hadeg,
+        row.relation_count_kegg
+      );
+    }
   });
 
   transaction();
 
   return {
-    integratedInserted,
     compoundInserted: summaries.compoundRows.length,
     geneInserted: summaries.geneRows.length,
     pathwayInserted: summaries.pathwayRows.length,
@@ -1168,6 +1188,8 @@ function ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summari
     compoundMetadataInserted: summaries.compoundMetadataRows.length,
     compoundGeneCardInserted: summaries.compoundGeneCardRows.length,
     compoundPathwayCardInserted: summaries.compoundPathwayCardRows.length,
+    compoundKoPathwayRelInserted: summaries.compoundKoPathwayRelRows.length,
+    compoundKoOverviewInserted: summaries.compoundKoOverviewRows.length,
   };
 }
 
@@ -1177,21 +1199,74 @@ function validateDatabase(db) {
 
   const invalidKo = db
     .prepare(`
-      SELECT COUNT(*) AS total
-      FROM integrated_table
-      WHERE ko IS NOT NULL
-        AND ko NOT GLOB 'K[0-9][0-9][0-9][0-9][0-9]'
+      SELECT SUM(total) AS total
+      FROM (
+        SELECT COUNT(*) AS total
+        FROM gene_summary
+        WHERE ko NOT GLOB 'K[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_gene_card
+        WHERE ko != ''
+          AND ko NOT GLOB 'K[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_ko_pathway_rel
+        WHERE ko NOT GLOB 'K[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_ko_overview
+        WHERE ko NOT GLOB 'K[0-9][0-9][0-9][0-9][0-9]'
+      )
     `)
-    .get().total;
+    .get().total ?? 0;
 
   const invalidCpd = db
     .prepare(`
-      SELECT COUNT(*) AS total
-      FROM integrated_table
-      WHERE cpd IS NOT NULL
-        AND cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+      SELECT SUM(total) AS total
+      FROM (
+        SELECT COUNT(*) AS total
+        FROM compound_summary
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM toxicity_endpoint
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_gene_map
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_pathway_map
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_reference_map
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_metadata
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_gene_card
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_pathway_card
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_ko_pathway_rel
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_ko_overview
+        WHERE cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
+      )
     `)
-    .get().total;
+    .get().total ?? 0;
 
   const compoundsWithToxicity = db
     .prepare('SELECT COUNT(DISTINCT cpd) AS total FROM toxicity_endpoint')
@@ -1209,8 +1284,39 @@ function validateDatabase(db) {
     `)
     .get().total;
 
+  const koOverviewCountMismatches = db
+    .prepare(`
+      SELECT COUNT(*) AS total
+      FROM compound_ko_overview cko
+      WHERE cko.relation_count_total != cko.relation_count_hadeg + cko.relation_count_kegg
+        OR cko.relation_count_hadeg != (
+          SELECT COUNT(*)
+          FROM compound_ko_pathway_rel rel
+          WHERE rel.cpd = cko.cpd
+            AND rel.ko = cko.ko
+            AND rel.source = 'HADEG'
+        )
+        OR cko.relation_count_kegg != (
+          SELECT COUNT(*)
+          FROM compound_ko_pathway_rel rel
+          WHERE rel.cpd = cko.cpd
+            AND rel.ko = cko.ko
+            AND rel.source = 'KEGG'
+        )
+    `)
+    .get().total;
+
+  const pathwaySupportAboveKoCount = db
+    .prepare(`
+      SELECT COUNT(*) AS total
+      FROM compound_pathway_card cpc
+      JOIN compound_summary cs ON cs.cpd = cpc.cpd
+      WHERE cpc.source IN ('HADEG', 'KEGG')
+        AND cpc.supporting_rows > cs.ko_count
+    `)
+    .get().total;
+
   return {
-    integrated: tableCount('integrated_table'),
     compounds: tableCount('compound_summary'),
     genes: tableCount('gene_summary'),
     pathways: tableCount('pathway_summary'),
@@ -1221,10 +1327,14 @@ function validateDatabase(db) {
     compoundMetadata: tableCount('compound_metadata'),
     compoundGeneCard: tableCount('compound_gene_card'),
     compoundPathwayCard: tableCount('compound_pathway_card'),
+    compoundKoPathwayRel: tableCount('compound_ko_pathway_rel'),
+    compoundKoOverview: tableCount('compound_ko_overview'),
     invalidKo,
     invalidCpd,
     compoundsWithToxicity,
     pathwayCountMismatches,
+    koOverviewCountMismatches,
+    pathwaySupportAboveKoCount,
   };
 }
 
@@ -1285,10 +1395,10 @@ async function main() {
 
   try {
     const ingestStartedAt = Date.now();
-    const inserted = ingestToSqlite(db, bioremppRows, hadegByKo, keggByKo, toxByCpd, summaries);
+    const inserted = ingestToSqlite(db, summaries);
     printStep(
       '6/8',
-      `Data inserted (integrated=${inserted.integratedInserted}, compounds=${inserted.compoundInserted}, genes=${inserted.geneInserted}, pathways=${inserted.pathwayInserted}, toxicity=${inserted.toxicityInserted})`,
+      `Data inserted (compounds=${inserted.compoundInserted}, genes=${inserted.geneInserted}, pathways=${inserted.pathwayInserted}, toxicity=${inserted.toxicityInserted}, ko_rel=${inserted.compoundKoPathwayRelInserted}, ko_overview=${inserted.compoundKoOverviewInserted})`,
       ingestStartedAt
     );
 
@@ -1307,7 +1417,6 @@ async function main() {
     console.log(`- KEGG rejected rows: ${rejected.kegg}`);
     console.log(`- ToxCSM rejected rows: ${rejected.toxcsm}`);
     console.log(`- Toxicity endpoints discovered: ${endpointUniverse.size}`);
-    console.log(`- integrated_table rows: ${checks.integrated}`);
     console.log(`- compound_summary rows: ${checks.compounds}`);
     console.log(`- gene_summary rows: ${checks.genes}`);
     console.log(`- pathway_summary rows: ${checks.pathways}`);
@@ -1318,10 +1427,14 @@ async function main() {
     console.log(`- compound_metadata rows: ${checks.compoundMetadata}`);
     console.log(`- compound_gene_card rows: ${checks.compoundGeneCard}`);
     console.log(`- compound_pathway_card rows: ${checks.compoundPathwayCard}`);
+    console.log(`- compound_ko_pathway_rel rows: ${checks.compoundKoPathwayRel}`);
+    console.log(`- compound_ko_overview rows: ${checks.compoundKoOverview}`);
     console.log(`- compounds with toxicity: ${checks.compoundsWithToxicity}`);
     console.log(`- pathway_count mismatches vs compound_pathway_card: ${checks.pathwayCountMismatches}`);
-    console.log(`- invalid ko in integrated_table: ${checks.invalidKo}`);
-    console.log(`- invalid cpd in integrated_table: ${checks.invalidCpd}`);
+    console.log(`- ko_overview mismatches vs relation table: ${checks.koOverviewCountMismatches}`);
+    console.log(`- pathway supports above ko_count (HADEG/KEGG): ${checks.pathwaySupportAboveKoCount}`);
+    console.log(`- invalid ko across runtime tables: ${checks.invalidKo}`);
+    console.log(`- invalid cpd across runtime tables: ${checks.invalidCpd}`);
     console.log('');
     console.log(`Completed at ${now()} in ${(elapsedMs(runStartedAt) / 1000).toFixed(2)}s`);
   } finally {

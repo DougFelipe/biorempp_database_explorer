@@ -1,13 +1,12 @@
 import fs from 'node:fs/promises';
-import { createReadStream, createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { createGzip } from 'node:zlib';
-import { finished } from 'node:stream/promises';
 import Database from 'better-sqlite3';
 
 const ASSET_VERSION = 'v0.0.2';
+const KO_GLOB = "K[0-9][0-9][0-9][0-9][0-9]";
+const CPD_GLOB = "C[0-9][0-9][0-9][0-9][0-9]";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,12 +53,8 @@ function parseJsonArray(value) {
   return [];
 }
 
-async function hashFile(filePath) {
-  const hash = createHash('sha256');
-  const stream = createReadStream(filePath);
-  stream.on('data', (chunk) => hash.update(chunk));
-  await finished(stream);
-  return hash.digest('hex');
+function toUniqueSorted(rows, key) {
+  return [...new Set(rows.map((row) => row[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
 async function writeJsonAsset(rootPath, relativePath, data) {
@@ -77,71 +72,90 @@ async function writeJsonAsset(rootPath, relativePath, data) {
 }
 
 function buildNetworkGraph(db) {
-  const koNodes = db
+  const koRows = db
     .prepare(`
-      SELECT DISTINCT ko AS id, ko AS label, 'ko' AS type
-      FROM integrated_table
+      SELECT DISTINCT ko
+      FROM gene_summary
       WHERE ko IS NOT NULL
       ORDER BY ko ASC
     `)
     .all();
 
-  const geneNodes = db
+  const geneRows = db
     .prepare(`
-      SELECT DISTINCT genesymbol AS id, genesymbol AS label, 'gene' AS type
-      FROM integrated_table
+      SELECT DISTINCT genesymbol
+      FROM compound_gene_map
       WHERE genesymbol IS NOT NULL
       ORDER BY genesymbol ASC
     `)
     .all();
 
-  const compoundNodes = db
+  const compoundRows = db
     .prepare(`
-      SELECT DISTINCT cpd AS id, COALESCE(compoundname, cpd) AS label, 'compound' AS type
+      SELECT cpd, COALESCE(compoundname, cpd) AS label
       FROM compound_summary
       WHERE cpd IS NOT NULL
       ORDER BY cpd ASC
     `)
     .all();
 
-  const pathwayNodes = db
+  const pathwayRows = db
     .prepare(`
-      SELECT DISTINCT pathway AS id, pathway AS label, 'pathway' AS type
+      SELECT DISTINCT pathway
       FROM pathway_summary
       WHERE pathway IS NOT NULL
       ORDER BY pathway ASC
     `)
     .all();
 
-  const koToGene = db
+  const koToGeneRows = db
     .prepare(`
-      SELECT DISTINCT ko AS source, genesymbol AS target, 'ko_to_gene' AS kind
-      FROM integrated_table
+      SELECT DISTINCT ko AS source, genesymbol AS target
+      FROM compound_gene_card
       WHERE ko IS NOT NULL
+        AND ko != ''
         AND genesymbol IS NOT NULL
+        AND genesymbol != ''
       ORDER BY ko ASC, genesymbol ASC
     `)
     .all();
 
-  const geneToCompound = db
+  const geneToCompoundRows = db
     .prepare(`
-      SELECT genesymbol AS source, cpd AS target, 'gene_to_compound' AS kind
+      SELECT genesymbol AS source, cpd AS target
       FROM compound_gene_map
       ORDER BY genesymbol ASC, cpd ASC
     `)
     .all();
 
-  const compoundToPathway = db
+  const compoundToPathwayRows = db
     .prepare(`
-      SELECT cpd AS source, pathway AS target, 'compound_to_pathway' AS kind
+      SELECT cpd AS source, pathway AS target
       FROM compound_pathway_map
       ORDER BY cpd ASC, pathway ASC
     `)
     .all();
 
   return {
-    nodes: [...koNodes, ...geneNodes, ...compoundNodes, ...pathwayNodes],
-    edges: [...koToGene, ...geneToCompound, ...compoundToPathway],
+    nodes: [
+      ...koRows.map((row) => ({ id: row.ko, label: row.ko, type: 'ko' })),
+      ...geneRows.map((row) => ({ id: row.genesymbol, label: row.genesymbol, type: 'gene' })),
+      ...compoundRows.map((row) => ({ id: row.cpd, label: row.label, type: 'compound' })),
+      ...pathwayRows.map((row) => ({ id: row.pathway, label: row.pathway, type: 'pathway' })),
+    ],
+    edges: [
+      ...koToGeneRows.map((row) => ({ source: row.source, target: row.target, kind: 'ko_to_gene' })),
+      ...geneToCompoundRows.map((row) => ({
+        source: row.source,
+        target: row.target,
+        kind: 'gene_to_compound',
+      })),
+      ...compoundToPathwayRows.map((row) => ({
+        source: row.source,
+        target: row.target,
+        kind: 'compound_to_pathway',
+      })),
+    ],
   };
 }
 
@@ -149,43 +163,41 @@ function buildSankeyData(db) {
   const koToCompound = db
     .prepare(`
       SELECT
-        it.ko AS ko,
-        it.cpd AS cpd,
+        ko,
+        cpd,
         COUNT(*) AS value
-      FROM (
-        SELECT DISTINCT ko, cpd
-        FROM integrated_table
-        WHERE ko IS NOT NULL
-          AND cpd IS NOT NULL
-      ) it
-      GROUP BY it.ko, it.cpd
-      ORDER BY it.ko ASC, it.cpd ASC
+      FROM compound_gene_card
+      WHERE ko IS NOT NULL
+        AND ko != ''
+      GROUP BY ko, cpd
+      ORDER BY ko ASC, cpd ASC
     `)
     .all();
 
   const compoundToToxicity = db
     .prepare(`
       SELECT
-        te.cpd AS cpd,
-        te.endpoint AS endpoint,
+        cpd,
+        endpoint,
         COUNT(*) AS value
-      FROM toxicity_endpoint te
-      WHERE te.cpd IS NOT NULL
-        AND te.endpoint IS NOT NULL
-      GROUP BY te.cpd, te.endpoint
-      ORDER BY te.cpd ASC, te.endpoint ASC
+      FROM toxicity_endpoint
+      WHERE cpd IS NOT NULL
+        AND endpoint IS NOT NULL
+      GROUP BY cpd, endpoint
+      ORDER BY cpd ASC, endpoint ASC
     `)
     .all();
 
-  const compoundLabelRows = db
-    .prepare(`
-      SELECT cpd, COALESCE(compoundname, cpd) AS label
-      FROM compound_summary
-      ORDER BY cpd ASC
-    `)
-    .all();
-
-  const compoundLabels = new Map(compoundLabelRows.map((row) => [row.cpd, row.label]));
+  const compoundLabels = new Map(
+    db
+      .prepare(`
+        SELECT cpd, COALESCE(compoundname, cpd) AS label
+        FROM compound_summary
+        ORDER BY cpd ASC
+      `)
+      .all()
+      .map((row) => [row.cpd, row.label])
+  );
 
   const nodesById = new Map();
   const links = [];
@@ -195,13 +207,8 @@ function buildSankeyData(db) {
     const compoundId = `compound:${row.cpd}`;
 
     if (!nodesById.has(koId)) {
-      nodesById.set(koId, {
-        id: koId,
-        label: row.ko,
-        type: 'ko',
-      });
+      nodesById.set(koId, { id: koId, label: row.ko, type: 'ko' });
     }
-
     if (!nodesById.has(compoundId)) {
       nodesById.set(compoundId, {
         id: compoundId,
@@ -229,13 +236,8 @@ function buildSankeyData(db) {
         type: 'compound',
       });
     }
-
     if (!nodesById.has(endpointId)) {
-      nodesById.set(endpointId, {
-        id: endpointId,
-        label: row.endpoint,
-        type: 'toxicity',
-      });
+      nodesById.set(endpointId, { id: endpointId, label: row.endpoint, type: 'toxicity' });
     }
 
     links.push({
@@ -252,97 +254,73 @@ function buildSankeyData(db) {
   };
 }
 
-function mapIntegratedRow(row) {
-  return {
-    id: row.id,
-    ko: row.ko,
-    genesymbol: row.genesymbol,
-    genename: row.genename,
-    enzyme_activity: row.enzyme_activity,
-    ec: row.ec,
-    reaction: row.reaction,
-    reaction_description: row.reaction_description,
-    cpd: row.cpd,
-    compoundname: row.compoundname,
-    compoundclass: row.compoundclass,
-    reference_ag: row.reference_ag,
-    pathway_hadeg: row.pathway_hadeg,
-    pathway_kegg: row.pathway_kegg,
-    compound_pathway: row.compound_pathway,
-    smiles: row.smiles,
-    chebi: row.chebi,
-    toxicity_labels: parseJsonObject(row.toxicity_labels),
-    toxicity_values: parseJsonObject(row.toxicity_values),
-    created_at: row.created_at,
-  };
-}
-
-function createFullWriter(absolutePath) {
-  const gzip = createGzip({ level: 9 });
-  const destination = createWriteStream(absolutePath);
-  gzip.pipe(destination);
-  return {
-    gzip,
-    destination,
-    hasItems: false,
-  };
-}
-
-function writeFullRow(writer, row) {
-  const chunk = JSON.stringify(row);
-  if (writer.hasItems) {
-    writer.gzip.write(',');
-  } else {
-    writer.hasItems = true;
-  }
-  writer.gzip.write(chunk);
-}
-
-async function finalizeFullWriter(writer) {
-  writer.gzip.write(']');
-  writer.gzip.end();
-  await Promise.all([finished(writer.destination), finished(writer.gzip)]);
-}
-
 function getCounts(db) {
-  const single = (sql) => db.prepare(sql).get().total;
+  const scalar = (sql) => db.prepare(sql).get().total;
+
+  const invalidKo = db
+    .prepare(`
+      SELECT SUM(total) AS total
+      FROM (
+        SELECT COUNT(*) AS total FROM gene_summary WHERE ko NOT GLOB '${KO_GLOB}'
+        UNION ALL
+        SELECT COUNT(*) AS total
+        FROM compound_gene_card
+        WHERE ko != ''
+          AND ko NOT GLOB '${KO_GLOB}'
+      )
+    `)
+    .get().total ?? 0;
+
+  const invalidCpd = db
+    .prepare(`
+      SELECT SUM(total) AS total
+      FROM (
+        SELECT COUNT(*) AS total FROM compound_summary WHERE cpd NOT GLOB '${CPD_GLOB}'
+        UNION ALL
+        SELECT COUNT(*) AS total FROM toxicity_endpoint WHERE cpd NOT GLOB '${CPD_GLOB}'
+        UNION ALL
+        SELECT COUNT(*) AS total FROM compound_gene_map WHERE cpd NOT GLOB '${CPD_GLOB}'
+        UNION ALL
+        SELECT COUNT(*) AS total FROM compound_pathway_map WHERE cpd NOT GLOB '${CPD_GLOB}'
+        UNION ALL
+        SELECT COUNT(*) AS total FROM compound_reference_map WHERE cpd NOT GLOB '${CPD_GLOB}'
+        UNION ALL
+        SELECT COUNT(*) AS total FROM compound_metadata WHERE cpd NOT GLOB '${CPD_GLOB}'
+        UNION ALL
+        SELECT COUNT(*) AS total FROM compound_gene_card WHERE cpd NOT GLOB '${CPD_GLOB}'
+        UNION ALL
+        SELECT COUNT(*) AS total FROM compound_pathway_card WHERE cpd NOT GLOB '${CPD_GLOB}'
+      )
+    `)
+    .get().total ?? 0;
 
   return {
-    integrated_rows: single('SELECT COUNT(*) AS total FROM integrated_table'),
-    compounds: single('SELECT COUNT(*) AS total FROM compound_summary'),
-    genes: single('SELECT COUNT(*) AS total FROM gene_summary'),
-    pathways: single('SELECT COUNT(*) AS total FROM pathway_summary'),
-    toxicity_rows: single('SELECT COUNT(*) AS total FROM toxicity_endpoint'),
-    toxicity_compounds: single('SELECT COUNT(DISTINCT cpd) AS total FROM toxicity_endpoint'),
-    toxicity_endpoints: single('SELECT COUNT(DISTINCT endpoint) AS total FROM toxicity_endpoint'),
-    invalid_ko: single(`
-      SELECT COUNT(*) AS total
-      FROM integrated_table
-      WHERE ko IS NOT NULL
-        AND ko NOT GLOB 'K[0-9][0-9][0-9][0-9][0-9]'
-    `),
-    invalid_cpd: single(`
-      SELECT COUNT(*) AS total
-      FROM integrated_table
-      WHERE cpd IS NOT NULL
-        AND cpd NOT GLOB 'C[0-9][0-9][0-9][0-9][0-9]'
-    `),
+    compounds: scalar('SELECT COUNT(*) AS total FROM compound_summary'),
+    genes: scalar('SELECT COUNT(*) AS total FROM gene_summary'),
+    pathways: scalar('SELECT COUNT(*) AS total FROM pathway_summary'),
+    toxicity_rows: scalar('SELECT COUNT(*) AS total FROM toxicity_endpoint'),
+    toxicity_compounds: scalar('SELECT COUNT(DISTINCT cpd) AS total FROM toxicity_endpoint'),
+    toxicity_endpoints: scalar('SELECT COUNT(DISTINCT endpoint) AS total FROM toxicity_endpoint'),
+    invalid_ko: invalidKo,
+    invalid_cpd: invalidCpd,
   };
 }
 
 async function main() {
-  const includeFull = process.argv.includes('--with-full');
   const dbPath = process.env.SQLITE_DB_PATH || defaultDbPath;
   const assetsPath = process.env.ASSET_OUTPUT_DIR || defaultAssetsPath;
   const startedAt = Date.now();
 
+  if (process.argv.includes('--with-full')) {
+    console.warn('Warning: "--with-full" is deprecated in lean runtime and will be ignored.');
+  }
+
   console.log(`Asset export started at ${now()}`);
   console.log(`Source DB: ${dbPath}`);
   console.log(`Target assets: ${assetsPath}`);
-  console.log(`Include full integrated archive: ${includeFull ? 'yes' : 'no'}`);
 
   await fs.rm(assetsPath, { recursive: true, force: true });
-  await fs.mkdir(path.join(assetsPath, 'integrated_table.by_compound'), { recursive: true });
+  await fs.mkdir(assetsPath, { recursive: true });
 
   const db = new Database(dbPath, {
     readonly: true,
@@ -380,9 +358,8 @@ async function main() {
         genes: parseJsonArray(row.genes),
         pathways: parseJsonArray(row.pathways),
       }));
-
     assetEntries.push(await writeJsonAsset(assetsPath, 'compound_summary.json', compoundSummary));
-    console.log(`[1/8] compound_summary.json exported (${compoundSummary.length} rows)`);
+    console.log(`[1/7] compound_summary.json exported (${compoundSummary.length} rows)`);
 
     const geneSummary = db
       .prepare(`
@@ -403,7 +380,7 @@ async function main() {
         enzyme_activities: parseJsonArray(row.enzyme_activities),
       }));
     assetEntries.push(await writeJsonAsset(assetsPath, 'gene_summary.json', geneSummary));
-    console.log(`[2/8] gene_summary.json exported (${geneSummary.length} rows)`);
+    console.log(`[2/7] gene_summary.json exported (${geneSummary.length} rows)`);
 
     const pathwaySummary = db
       .prepare(`
@@ -418,7 +395,7 @@ async function main() {
       `)
       .all();
     assetEntries.push(await writeJsonAsset(assetsPath, 'pathway_summary.json', pathwaySummary));
-    console.log(`[3/8] pathway_summary.json exported (${pathwaySummary.length} rows)`);
+    console.log(`[3/7] pathway_summary.json exported (${pathwaySummary.length} rows)`);
 
     const toxicityMatrix = db
       .prepare(`
@@ -435,112 +412,18 @@ async function main() {
       `)
       .all();
     assetEntries.push(await writeJsonAsset(assetsPath, 'toxicity_matrix.json', toxicityMatrix));
-    console.log(`[4/8] toxicity_matrix.json exported (${toxicityMatrix.length} rows)`);
+    console.log(`[4/7] toxicity_matrix.json exported (${toxicityMatrix.length} rows)`);
 
     const networkGraph = buildNetworkGraph(db);
     assetEntries.push(await writeJsonAsset(assetsPath, 'network_graph.json', networkGraph));
     console.log(
-      `[5/8] network_graph.json exported (${networkGraph.nodes.length} nodes, ${networkGraph.edges.length} edges)`
+      `[5/7] network_graph.json exported (${networkGraph.nodes.length} nodes, ${networkGraph.edges.length} edges)`
     );
 
     const sankeyData = buildSankeyData(db);
     assetEntries.push(await writeJsonAsset(assetsPath, 'sankey_data.json', sankeyData));
     console.log(
-      `[6/8] sankey_data.json exported (${sankeyData.nodes.length} nodes, ${sankeyData.links.length} links)`
-    );
-
-    const compounds = db
-      .prepare(`
-        SELECT cpd, compoundname
-        FROM compound_summary
-        ORDER BY cpd ASC
-      `)
-      .all();
-
-    const selectIntegratedByCompound = db.prepare(`
-      SELECT
-        id,
-        ko,
-        genesymbol,
-        genename,
-        enzyme_activity,
-        ec,
-        reaction,
-        reaction_description,
-        cpd,
-        compoundname,
-        compoundclass,
-        reference_ag,
-        pathway_hadeg,
-        pathway_kegg,
-        compound_pathway,
-        smiles,
-        chebi,
-        toxicity_labels,
-        toxicity_values,
-        created_at
-      FROM integrated_table
-      WHERE cpd = ?
-      ORDER BY genesymbol ASC, ko ASC, id ASC
-    `);
-
-    const integratedIndex = [];
-    let shardRowCount = 0;
-    let fullWriter = null;
-    let fullFileRelativePath = null;
-
-    if (includeFull) {
-      fullFileRelativePath = 'integrated_table.full.json.gz';
-      const fullAbsolutePath = path.join(assetsPath, fullFileRelativePath);
-      fullWriter = createFullWriter(fullAbsolutePath);
-      fullWriter.gzip.write('[');
-    }
-
-    for (const compound of compounds) {
-      const rows = selectIntegratedByCompound.all(compound.cpd).map(mapIntegratedRow);
-      const relativePath = normalizeAssetPath(
-        path.join('integrated_table.by_compound', `${compound.cpd}.json`)
-      );
-      const writeResult = await writeJsonAsset(assetsPath, relativePath, rows);
-      shardRowCount += rows.length;
-
-      integratedIndex.push({
-        cpd: compound.cpd,
-        compoundname: compound.compoundname,
-        row_count: rows.length,
-        file: relativePath,
-      });
-
-      if (fullWriter) {
-        for (const row of rows) {
-          writeFullRow(fullWriter, row);
-        }
-      }
-
-      if (rows.length > 0) {
-        assetEntries.push({
-          path: writeResult.path,
-          bytes: writeResult.bytes,
-          sha256: writeResult.sha256,
-          shard: true,
-        });
-      }
-    }
-
-    if (fullWriter) {
-      await finalizeFullWriter(fullWriter);
-      const fullAbsolutePath = path.join(assetsPath, fullFileRelativePath);
-      const fullStat = await fs.stat(fullAbsolutePath);
-      assetEntries.push({
-        path: fullFileRelativePath,
-        bytes: fullStat.size,
-        sha256: await hashFile(fullAbsolutePath),
-      });
-    }
-
-    assetEntries.push(await writeJsonAsset(assetsPath, 'integrated_table.index.json', integratedIndex));
-    console.log(
-      `[7/8] integrated table shards exported (${integratedIndex.length} compounds, ${shardRowCount} rows)`
+      `[6/7] sankey_data.json exported (${sankeyData.nodes.length} nodes, ${sankeyData.links.length} links)`
     );
 
     const counts = getCounts(db);
@@ -548,19 +431,10 @@ async function main() {
       version: ASSET_VERSION,
       generated_at: now(),
       source_db: normalizeAssetPath(path.relative(projectRoot, dbPath)),
-      include_integrated_full: includeFull,
-      counts: {
-        ...counts,
-        integrated_shards: integratedIndex.length,
-      },
-      assets: assetEntries
-        .filter((entry) => !entry.shard)
-        .map(({ shard, ...entry }) => entry),
-      integrated_shards: {
-        index_file: 'integrated_table.index.json',
-        directory: 'integrated_table.by_compound',
-        count: integratedIndex.length,
-      },
+      runtime_profile: 'lean',
+      include_integrated_full: false,
+      counts,
+      assets: assetEntries,
       toxicity_risk_mean: {
         source: 'derived',
         formula: 'mean(value_*)',
@@ -570,10 +444,14 @@ async function main() {
         phase_1: ['CompoundRankingBarChart', 'CompoundPathwayHeatmap'],
         phase_2: ['NetworkGraph', 'SankeyFlow', 'ToxicityRadar'],
       },
+      dimensions: {
+        compound_classes: toUniqueSorted(compoundSummary, 'compoundclass'),
+        pathway_sources: toUniqueSorted(pathwaySummary, 'source'),
+      },
     };
 
     await writeJsonAsset(assetsPath, 'manifest.json', manifest);
-    console.log('[8/8] manifest.json exported');
+    console.log('[7/7] manifest.json exported');
 
     const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(2);
     console.log('');
@@ -581,7 +459,6 @@ async function main() {
     console.log(`- compounds: ${counts.compounds}`);
     console.log(`- toxicity compounds: ${counts.toxicity_compounds}`);
     console.log(`- toxicity endpoints: ${counts.toxicity_endpoints}`);
-    console.log(`- integrated rows: ${counts.integrated_rows}`);
     console.log(`- invalid ko: ${counts.invalid_ko}`);
     console.log(`- invalid cpd: ${counts.invalid_cpd}`);
     console.log(`Completed at ${now()} in ${elapsedSeconds}s`);

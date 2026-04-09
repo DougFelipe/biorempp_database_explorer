@@ -1,8 +1,7 @@
-import type { CompoundSummary, GeneSummary, IntegratedData, PathwaySummary } from '../types/database';
+import type { CompoundSummary, GeneSummary, PathwaySummary } from '../types/database';
 import type {
   AssetManifest,
   AssetMetadataResponse,
-  IntegratedTableIndexRow,
   NetworkGraphData,
   SankeyData,
   ToxicityMatrixRow,
@@ -60,12 +59,4 @@ export function getNetworkGraphAsset(): Promise<NetworkGraphData> {
 
 export function getSankeyDataAsset(): Promise<SankeyData> {
   return fetchAsset<SankeyData>('sankey_data.json');
-}
-
-export function getIntegratedTableIndexAsset(): Promise<IntegratedTableIndexRow[]> {
-  return fetchAsset<IntegratedTableIndexRow[]>('integrated_table.index.json');
-}
-
-export function getIntegratedTableShardAsset(cpd: string): Promise<IntegratedData[]> {
-  return fetchAsset<IntegratedData[]>(`integrated_table.by_compound/${encodeURIComponent(cpd)}.json`);
 }
