@@ -64,14 +64,13 @@ export function CompoundOverviewTab({ cpd }: CompoundOverviewTabProps) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <KoBarOverview rows={overview.ko_bar} />
-        <PathwayTopOverview rows={overview.pathways_top} />
+        <PathwayTopOverview title="Top KEGG Pathways" rows={overview.pathways_top_kegg} />
+        <PathwayTopOverview title="Top HADEG Pathways" rows={overview.pathways_top_hadeg} />
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <PathwayCoverageOverview matrix={overview.pathway_coverage} />
-        <ToxicityHeatmapOverview rows={overview.toxicity_heatmap} />
-      </div>
+      <PathwayCoverageOverview matrix={overview.pathway_coverage} />
+      <ToxicityHeatmapOverview rows={overview.toxicity_heatmap} />
     </div>
   );
 }

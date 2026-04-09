@@ -264,7 +264,7 @@ export function CompoundDetail({ cpd, onClose }: CompoundDetailProps) {
           </div>
         </div>
 
-        <div className="p-6 max-h-96 overflow-y-auto">
+        <div className="p-6 max-h-[72vh] overflow-y-auto">
           {activeTab === 'overview' && <CompoundOverviewTab cpd={cpd} />}
 
           {activeTab === 'genes' && (

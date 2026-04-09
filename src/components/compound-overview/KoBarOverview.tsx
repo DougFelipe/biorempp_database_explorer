@@ -11,7 +11,7 @@ export function KoBarOverview({ rows }: KoBarOverviewProps) {
   const items = toKoBarItems(rows);
 
   return (
-    <ChartCard title="Gene Function (by KO)">
+    <ChartCard title="KO Coverage (Real Relations)" subtitle="Distinct KO↔Pathway relations (HADEG + KEGG)">
       <HorizontalBarChart
         items={items}
         emptyMessage="No KO distribution available."

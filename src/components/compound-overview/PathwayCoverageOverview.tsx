@@ -32,7 +32,7 @@ export function PathwayCoverageOverview({ matrix }: PathwayCoverageOverviewProps
   const heatmap = toPathwayCoverageHeatmap(matrix);
 
   return (
-    <ChartCard title="Pathway Coverage" subtitle="Source x pathway with support intensity">
+    <ChartCard title="Pathway Coverage" subtitle="KEGG x HADEG pathway support (distinct KO relations)">
       <div className="space-y-3">
         <CategoricalHeatmap
           xLabels={heatmap.xLabels}
@@ -44,9 +44,8 @@ export function PathwayCoverageOverview({ matrix }: PathwayCoverageOverviewProps
         />
         <ChartLegend
           items={[
-            { label: 'HADEG', color: '#60a5fa' },
             { label: 'KEGG', color: '#86efac' },
-            { label: 'Compound pathway', color: '#cbd5e1' },
+            { label: 'HADEG', color: '#60a5fa' },
           ]}
         />
       </div>
