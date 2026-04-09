@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BarChart3, Database, Dna, GitBranch, FlaskConical, ShieldAlert } from 'lucide-react';
 import { CompoundExplorer } from './components/CompoundExplorer';
 import { CompoundDetail } from './components/CompoundDetail';
@@ -8,10 +8,88 @@ import { ToxicityExplorer } from './components/ToxicityExplorer';
 import { VisualizationsHub } from './components/VisualizationsHub';
 
 type View = 'compounds' | 'genes' | 'pathways' | 'toxicity' | 'visualizations';
+type Route = { kind: 'view'; view: View } | { kind: 'compound'; cpd: string };
+
+const VIEW_PATHS: Record<View, string> = {
+  compounds: '/compounds',
+  genes: '/genes',
+  pathways: '/pathways',
+  toxicity: '/toxicity',
+  visualizations: '/visualizations',
+};
+
+function normalizePath(pathname: string) {
+  const cleaned = pathname.replace(/\/+$/, '');
+  return cleaned || '/';
+}
+
+function parseRoute(pathname: string): Route {
+  const path = normalizePath(pathname);
+
+  if (path === '/' || path === '/compounds') {
+    return { kind: 'view', view: 'compounds' };
+  }
+  if (path === '/genes') {
+    return { kind: 'view', view: 'genes' };
+  }
+  if (path === '/pathways') {
+    return { kind: 'view', view: 'pathways' };
+  }
+  if (path === '/toxicity') {
+    return { kind: 'view', view: 'toxicity' };
+  }
+  if (path === '/visualizations') {
+    return { kind: 'view', view: 'visualizations' };
+  }
+  if (path.startsWith('/compounds/')) {
+    const cpd = decodeURIComponent(path.slice('/compounds/'.length)).trim();
+    if (cpd) {
+      return { kind: 'compound', cpd: cpd.toUpperCase() };
+    }
+  }
+
+  return { kind: 'view', view: 'compounds' };
+}
 
 function App() {
-  const [activeView, setActiveView] = useState<View>('compounds');
-  const [selectedCompound, setSelectedCompound] = useState<string | null>(null);
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
+
+  useEffect(() => {
+    const onPopState = () => {
+      setRoute(parseRoute(window.location.pathname));
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, []);
+
+  function navigate(path: string, replace = false) {
+    const target = normalizePath(path);
+    const current = normalizePath(window.location.pathname);
+
+    if (target !== current) {
+      if (replace) {
+        window.history.replaceState(null, '', target);
+      } else {
+        window.history.pushState(null, '', target);
+      }
+    }
+
+    setRoute(parseRoute(target));
+    window.scrollTo({ top: 0 });
+  }
+
+  function navigateToView(view: View) {
+    navigate(VIEW_PATHS[view]);
+  }
+
+  function openCompoundDetail(cpd: string) {
+    navigate(`/compounds/${encodeURIComponent(cpd)}`);
+  }
+
+  const activeView: View = route.kind === 'compound' ? 'compounds' : route.view;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -33,7 +111,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-8">
             <button
-              onClick={() => setActiveView('compounds')}
+              onClick={() => navigateToView('compounds')}
               className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
                 activeView === 'compounds'
                   ? 'border-blue-600 text-blue-600'
@@ -44,7 +122,7 @@ function App() {
               Compounds
             </button>
             <button
-              onClick={() => setActiveView('genes')}
+              onClick={() => navigateToView('genes')}
               className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
                 activeView === 'genes'
                   ? 'border-blue-600 text-blue-600'
@@ -55,7 +133,7 @@ function App() {
               Genes / KO
             </button>
             <button
-              onClick={() => setActiveView('pathways')}
+              onClick={() => navigateToView('pathways')}
               className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
                 activeView === 'pathways'
                   ? 'border-blue-600 text-blue-600'
@@ -66,7 +144,7 @@ function App() {
               Pathways
             </button>
             <button
-              onClick={() => setActiveView('toxicity')}
+              onClick={() => navigateToView('toxicity')}
               className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
                 activeView === 'toxicity'
                   ? 'border-blue-600 text-blue-600'
@@ -77,7 +155,7 @@ function App() {
               Toxicity
             </button>
             <button
-              onClick={() => setActiveView('visualizations')}
+              onClick={() => navigateToView('visualizations')}
               className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
                 activeView === 'visualizations'
                   ? 'border-blue-600 text-blue-600'
@@ -92,21 +170,20 @@ function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeView === 'compounds' && (
-          <CompoundExplorer onCompoundSelect={setSelectedCompound} />
+        {route.kind === 'view' && route.view === 'compounds' && (
+          <CompoundExplorer onCompoundSelect={openCompoundDetail} />
         )}
-        {activeView === 'genes' && <GeneExplorer />}
-        {activeView === 'pathways' && <PathwayExplorer />}
-        {activeView === 'toxicity' && <ToxicityExplorer />}
-        {activeView === 'visualizations' && <VisualizationsHub />}
+        {route.kind === 'view' && route.view === 'genes' && <GeneExplorer />}
+        {route.kind === 'view' && route.view === 'pathways' && <PathwayExplorer />}
+        {route.kind === 'view' && route.view === 'toxicity' && <ToxicityExplorer />}
+        {route.kind === 'view' && route.view === 'visualizations' && <VisualizationsHub />}
+        {route.kind === 'compound' && (
+          <CompoundDetail
+            cpd={route.cpd}
+            onBack={() => navigateToView('compounds')}
+          />
+        )}
       </main>
-
-      {selectedCompound && (
-        <CompoundDetail
-          cpd={selectedCompound}
-          onClose={() => setSelectedCompound(null)}
-        />
-      )}
 
       <footer className="bg-white border-t border-gray-200 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
