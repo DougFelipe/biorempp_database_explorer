@@ -9,9 +9,8 @@ import { GeneExplorer } from './components/GeneExplorer';
 import { PathwayExplorer } from './components/PathwayExplorer';
 import { PathwayDetail } from './components/PathwayDetail';
 import { ToxicityExplorer } from './components/ToxicityExplorer';
-import { VisualizationsHub } from './components/VisualizationsHub';
 
-type View = 'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'visualizations' | 'guided-analysis';
+type View = 'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'guided-analysis';
 type Route =
   | { kind: 'view'; view: View }
   | { kind: 'compound'; cpd: string }
@@ -24,7 +23,6 @@ const VIEW_PATHS: Record<View, string> = {
   genes: '/genes',
   pathways: '/pathways',
   toxicity: '/toxicity',
-  visualizations: '/visualizations',
   'guided-analysis': '/guided-analysis',
 };
 
@@ -51,8 +49,9 @@ function parseRoute(pathname: string): Route {
   if (path === '/toxicity') {
     return { kind: 'view', view: 'toxicity' };
   }
+  // Legacy alias: Visualizations has been deprecated in favor of Guided Analysis.
   if (path === '/visualizations') {
-    return { kind: 'view', view: 'visualizations' };
+    return { kind: 'view', view: 'guided-analysis' };
   }
   if (path === '/guided-analysis') {
     return { kind: 'view', view: 'guided-analysis' };
@@ -103,6 +102,14 @@ function App() {
     return () => {
       window.removeEventListener('popstate', onPopState);
     };
+  }, []);
+
+  useEffect(() => {
+    const path = normalizePath(window.location.pathname);
+    if (path === '/visualizations') {
+      window.history.replaceState(null, '', '/guided-analysis');
+      setRoute({ kind: 'view', view: 'guided-analysis' });
+    }
   }, []);
 
   function navigate(path: string, replace = false) {
@@ -227,17 +234,6 @@ function App() {
               Toxicity
             </button>
             <button
-              onClick={() => navigateToView('visualizations')}
-              className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
-                activeView === 'visualizations'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              Visualizations
-            </button>
-            <button
               onClick={() => navigateToView('guided-analysis')}
               className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
                 activeView === 'guided-analysis'
@@ -264,7 +260,6 @@ function App() {
           <PathwayExplorer onPathwaySelect={openPathwayDetail} />
         )}
         {route.kind === 'view' && route.view === 'toxicity' && <ToxicityExplorer />}
-        {route.kind === 'view' && route.view === 'visualizations' && <VisualizationsHub />}
         {route.kind === 'view' && route.view === 'guided-analysis' && (
           <GuidedAnalysisPage onCompoundSelect={openCompoundDetail} />
         )}
