@@ -27,11 +27,13 @@ export interface ToxicityFacet {
   endpoints: ToxicityFacetEndpoint[];
 }
 
-const GROUP_DEFINITIONS: Array<{
+export interface ToxicityEndpointGroupDefinition {
   key: ToxicityEndpointGroupKey;
   title: string;
   endpoints: string[];
-}> = [
+}
+
+const GROUP_DEFINITIONS: ToxicityEndpointGroupDefinition[] = [
   {
     key: 'ecotoxicity',
     title: 'Ecotoxicity',
@@ -122,12 +124,28 @@ for (const group of GROUP_DEFINITIONS) {
   }
 }
 
-function groupTitleByKey(key: ToxicityEndpointGroupKey) {
+export function getToxicityEndpointGroupTitle(key: ToxicityEndpointGroupKey) {
   if (key === 'other') {
     return 'Other';
   }
   return GROUP_DEFINITIONS.find((group) => group.key === key)?.title || 'Other';
 }
+
+export function getToxicityEndpointGroupKey(endpoint: string): ToxicityEndpointGroupKey {
+  return endpointToGroup.get(endpoint) ?? 'other';
+}
+
+export const TOXICITY_ENDPOINT_GROUPS: ToxicityEndpointGroupDefinition[] = [
+  ...GROUP_DEFINITIONS.map((group) => ({
+    ...group,
+    endpoints: [...group.endpoints],
+  })),
+  {
+    key: 'other',
+    title: 'Other',
+    endpoints: [],
+  },
+];
 
 function getShortEndpointLabel(endpoint: string) {
   return SHORT_LABELS[endpoint] || shortLabel(formatEndpoint(endpoint), 10);
@@ -191,7 +209,7 @@ export function toToxicityFacets(rows: ToxicityHeatmapDatum[]): ToxicityFacet[] 
 
       return {
         key,
-        title: groupTitleByKey(key),
+        title: getToxicityEndpointGroupTitle(key),
         orderedEndpoints,
         prediction,
         risk,
