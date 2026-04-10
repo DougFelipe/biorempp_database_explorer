@@ -1,5 +1,7 @@
 import type {
   CompoundOverviewResponse,
+  CompoundClassDetailOverviewResponse,
+  CompoundClassSummary,
   CompoundSummary,
   CompoundMetadata,
   GeneSummary,
@@ -10,6 +12,7 @@ import type {
   CompoundPathwayCardRow,
   PathwayOption,
   CompoundFilters,
+  CompoundClassFilters,
   GeneFilters,
   PathwayFilters,
   ToxicityFilters,
@@ -133,6 +136,19 @@ export async function getPathways(
   );
 }
 
+export async function getCompoundClasses(
+  filters: CompoundClassFilters = {},
+  pagination: PaginationParams = { page: 1, pageSize: 50 }
+): Promise<PaginatedResponse<CompoundClassSummary>> {
+  return fetchJson(
+    `/api/compound-classes${buildQuery({
+      ...filters,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    })}`
+  );
+}
+
 export async function getPathwayDetailOverview(
   pathway: string,
   options: { source?: string } = {}
@@ -141,6 +157,16 @@ export async function getPathwayDetailOverview(
     `/api/pathways/detail/overview${buildQuery({
       pathway,
       source: options.source,
+    })}`
+  );
+}
+
+export async function getCompoundClassDetailOverview(
+  compoundclass: string
+): Promise<CompoundClassDetailOverviewResponse> {
+  return fetchJson(
+    `/api/compound-classes/detail/overview${buildQuery({
+      compoundclass,
     })}`
   );
 }

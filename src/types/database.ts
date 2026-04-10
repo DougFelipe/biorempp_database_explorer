@@ -152,6 +152,26 @@ export interface PathwaySummary {
   updated_at: string;
 }
 
+export interface CompoundClassSummary {
+  compoundclass: string;
+  compound_count: number;
+  ko_count: number;
+  gene_count: number;
+  pathway_count: number;
+  updated_at: string | null;
+}
+
+export interface CompoundClassOverviewSummary {
+  compoundclass: string;
+  ko_count: number;
+  gene_count: number;
+  compound_count: number;
+  reaction_ec_count: number;
+  pathway_count: number;
+  source_count: number;
+  toxicity_coverage_pct: number | null;
+}
+
 export interface PathwayOverviewSummary {
   pathway: string;
   selected_source: string;
@@ -208,6 +228,15 @@ export interface PathwayDetailOverviewResponse {
   toxicity_matrix: PathwayToxicityMatrix;
 }
 
+export interface CompoundClassDetailOverviewResponse {
+  compoundclass: string;
+  summary: CompoundClassOverviewSummary;
+  ko_distribution: PathwayKoDistributionDatum[];
+  gene_distribution: PathwayGeneDistributionDatum[];
+  ec_class_distribution: PathwayEcClassDistributionDatum[];
+  toxicity_matrix: PathwayToxicityMatrix;
+}
+
 export interface CompoundFilters {
   compoundclass?: string;
   reference_ag?: string;
@@ -230,6 +259,10 @@ export interface GeneFilters {
 
 export interface PathwayFilters {
   source?: string;
+  search?: string;
+}
+
+export interface CompoundClassFilters {
   search?: string;
 }
 

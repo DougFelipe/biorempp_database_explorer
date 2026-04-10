@@ -865,6 +865,270 @@ app.get('/api/genes', (req, res, next) => {
   }
 });
 
+app.get('/api/compound-classes', (req, res, next) => {
+  try {
+    const { page, pageSize, offset } = getPagination(req.query);
+    const where = ['cs.compoundclass IS NOT NULL', "TRIM(cs.compoundclass) <> ''"];
+    const params = [];
+
+    if (req.query.search) {
+      where.push('cs.compoundclass LIKE ? COLLATE NOCASE');
+      params.push(likeValue(String(req.query.search)));
+    }
+
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+    const total = db
+      .prepare(`
+        SELECT COUNT(*) AS total
+        FROM (
+          SELECT cs.compoundclass
+          FROM compound_summary cs
+          ${whereSql}
+          GROUP BY cs.compoundclass
+        )
+      `)
+      .get(...params).total;
+
+    const rows = db
+      .prepare(`
+        SELECT
+          cs.compoundclass,
+          COUNT(DISTINCT cs.cpd) AS compound_count,
+          COUNT(DISTINCT cgc.ko) AS ko_count,
+          COUNT(DISTINCT cgc.genesymbol) AS gene_count,
+          COUNT(DISTINCT CASE WHEN cpc.pathway IS NOT NULL AND cpc.source IS NOT NULL THEN cpc.source || '|' || cpc.pathway END) AS pathway_count,
+          MAX(cs.updated_at) AS updated_at
+        FROM compound_summary cs
+        LEFT JOIN compound_gene_card cgc
+          ON cgc.cpd = cs.cpd
+        LEFT JOIN compound_pathway_card cpc
+          ON cpc.cpd = cs.cpd
+        ${whereSql}
+        GROUP BY cs.compoundclass
+        ORDER BY compound_count DESC, cs.compoundclass ASC
+        LIMIT ? OFFSET ?
+      `)
+      .all(...params, pageSize, offset);
+
+    res.json(toPaginatedResponse(rows, total, page, pageSize));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/compound-classes/detail/overview', (req, res, next) => {
+  try {
+    const compoundclass = String(req.query.compoundclass || '').trim();
+    if (!compoundclass) {
+      res.status(400).json({ error: 'Missing required query parameter: compoundclass' });
+      return;
+    }
+
+    const compounds = db
+      .prepare(`
+        SELECT
+          cs.cpd,
+          cs.compoundname
+        FROM compound_summary cs
+        WHERE cs.compoundclass = ?
+        ORDER BY COALESCE(cs.compoundname, cs.cpd) ASC, cs.cpd ASC
+      `)
+      .all(compoundclass);
+
+    if (compounds.length === 0) {
+      res.status(404).json({ error: `Compound class "${compoundclass}" not found` });
+      return;
+    }
+
+    const geneRows = db
+      .prepare(`
+        SELECT DISTINCT
+          cgc.cpd,
+          cgc.ko,
+          cgc.genesymbol,
+          cgc.ec
+        FROM compound_gene_card cgc
+        JOIN compound_summary cs
+          ON cs.cpd = cgc.cpd
+        WHERE cs.compoundclass = ?
+      `)
+      .all(compoundclass);
+
+    const pathwayRows = db
+      .prepare(`
+        SELECT DISTINCT
+          cpc.source,
+          cpc.pathway
+        FROM compound_pathway_card cpc
+        JOIN compound_summary cs
+          ON cs.cpd = cpc.cpd
+        WHERE cs.compoundclass = ?
+      `)
+      .all(compoundclass);
+
+    const koSet = new Set(geneRows.map((row) => row.ko).filter(Boolean));
+    const geneSet = new Set(
+      geneRows.map((row) => String(row.genesymbol || '').trim()).filter((value) => value.length > 0)
+    );
+
+    const koToGenes = new Map();
+    for (const row of geneRows) {
+      const ko = String(row.ko || '').trim();
+      const gene = String(row.genesymbol || '').trim();
+      if (!ko || !gene) {
+        continue;
+      }
+      if (!koToGenes.has(ko)) {
+        koToGenes.set(ko, new Set());
+      }
+      koToGenes.get(ko).add(gene);
+    }
+
+    const koDistribution = [...koToGenes.entries()]
+      .map(([ko, genes]) => ({
+        ko,
+        count: genes.size,
+      }))
+      .sort((a, b) => b.count - a.count || a.ko.localeCompare(b.ko))
+      .slice(0, 10);
+
+    const geneToKos = new Map();
+    for (const row of geneRows) {
+      const ko = String(row.ko || '').trim();
+      const gene = String(row.genesymbol || '').trim();
+      if (!ko || !gene) {
+        continue;
+      }
+      if (!geneToKos.has(gene)) {
+        geneToKos.set(gene, new Set());
+      }
+      geneToKos.get(gene).add(ko);
+    }
+
+    const geneDistribution = [...geneToKos.entries()]
+      .map(([gene, kos]) => ({
+        gene,
+        count: kos.size,
+      }))
+      .sort((a, b) => b.count - a.count || a.gene.localeCompare(b.gene))
+      .slice(0, 10);
+
+    const ecTokenSet = new Set();
+    for (const row of geneRows) {
+      const rawEc = String(row.ec || '').trim();
+      if (!rawEc) {
+        continue;
+      }
+      for (const token of rawEc.split(/[;,]/)) {
+        const ec = token.trim();
+        if (ec && ec !== '-') {
+          ecTokenSet.add(ec);
+        }
+      }
+    }
+
+    const ecClassCount = new Map();
+    for (const ec of ecTokenSet) {
+      const match = /^([1-9])\./.exec(ec);
+      const key = match ? `${match[1]}.x.x.x` : 'Other';
+      ecClassCount.set(key, (ecClassCount.get(key) || 0) + 1);
+    }
+
+    const ecClassOrder = ['1.x.x.x', '2.x.x.x', '3.x.x.x', '4.x.x.x', '5.x.x.x', '6.x.x.x', '7.x.x.x', 'Other'];
+    const ecClassDistribution = [...ecClassCount.entries()]
+      .map(([ecClass, count]) => ({ ec_class: ecClass, count }))
+      .sort((a, b) => {
+        const ai = ecClassOrder.indexOf(a.ec_class);
+        const bi = ecClassOrder.indexOf(b.ec_class);
+        if (ai !== -1 && bi !== -1) {
+          return ai - bi;
+        }
+        if (ai !== -1) {
+          return -1;
+        }
+        if (bi !== -1) {
+          return 1;
+        }
+        return a.ec_class.localeCompare(b.ec_class);
+      });
+
+    const pathwaySet = new Set(
+      pathwayRows
+        .map((row) => {
+          const source = String(row.source || '').trim();
+          const pathway = String(row.pathway || '').trim();
+          if (!source || !pathway) {
+            return null;
+          }
+          return `${source}|${pathway}`;
+        })
+        .filter(Boolean)
+    );
+
+    const sourceSet = new Set(
+      pathwayRows.map((row) => String(row.source || '').trim()).filter((value) => value.length > 0)
+    );
+
+    const endpoints = readDistinctStrings(`
+      SELECT DISTINCT endpoint AS value
+      FROM toxicity_endpoint
+      ORDER BY endpoint ASC
+    `);
+
+    const toxicityRows = db
+      .prepare(`
+        SELECT
+          te.cpd,
+          te.endpoint,
+          te.label,
+          te.value
+        FROM toxicity_endpoint te
+        JOIN compound_summary cs
+          ON cs.cpd = te.cpd
+        WHERE cs.compoundclass = ?
+        ORDER BY te.cpd ASC, te.endpoint ASC
+      `)
+      .all(compoundclass);
+
+    const compoundsWithToxicity = new Set(toxicityRows.map((row) => row.cpd).filter(Boolean));
+    const toxicityCoveragePct =
+      compounds.length > 0 ? Math.round((compoundsWithToxicity.size / compounds.length) * 100) : null;
+
+    res.json({
+      compoundclass,
+      summary: {
+        compoundclass,
+        ko_count: koSet.size,
+        gene_count: geneSet.size,
+        compound_count: compounds.length,
+        reaction_ec_count: ecTokenSet.size,
+        pathway_count: pathwaySet.size,
+        source_count: sourceSet.size,
+        toxicity_coverage_pct: toxicityCoveragePct,
+      },
+      ko_distribution: koDistribution,
+      gene_distribution: geneDistribution,
+      ec_class_distribution: ecClassDistribution,
+      toxicity_matrix: {
+        compounds: compounds.map((row) => ({
+          cpd: row.cpd,
+          compoundname: row.compoundname || null,
+        })),
+        endpoints,
+        cells: toxicityRows.map((row) => ({
+          cpd: row.cpd,
+          endpoint: row.endpoint,
+          label: row.label,
+          value: row.value === null ? null : Number(row.value),
+          risk_bucket: deriveRiskBucket(row.label),
+        })),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/pathways/detail/overview', (req, res, next) => {
   try {
     const pathway = String(req.query.pathway || '').trim();
