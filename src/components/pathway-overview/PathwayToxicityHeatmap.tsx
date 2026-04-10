@@ -58,8 +58,7 @@ export function PathwayToxicityHeatmap({ matrix }: PathwayToxicityHeatmapProps) 
         meanToxicity: count > 0 ? sum / count : -1,
       };
     })
-    .sort((a, b) => b.meanToxicity - a.meanToxicity || (a.compoundname || a.cpd).localeCompare(b.compoundname || b.cpd))
-    .slice(0, 22);
+    .sort((a, b) => b.meanToxicity - a.meanToxicity || (a.compoundname || a.cpd).localeCompare(b.compoundname || b.cpd));
 
   if (endpointOrder.length === 0 || compounds.length === 0) {
     return (
@@ -72,6 +71,10 @@ export function PathwayToxicityHeatmap({ matrix }: PathwayToxicityHeatmapProps) 
   return (
     <ChartCard title="Toxicity Heatmap" subtitle="Compounds on Y-axis and grouped endpoints on top">
       <div className="space-y-3">
+        <p className="text-xs text-gray-600">
+          Showing {compounds.length} of {matrix.compounds.length} compounds
+        </p>
+
         <div className="flex items-center gap-2 text-xs text-gray-600">
           <span>Low</span>
           <div
