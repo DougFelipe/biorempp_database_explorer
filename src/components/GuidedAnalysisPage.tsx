@@ -13,6 +13,8 @@ import { GuidedInsightPanel } from './guided-analysis/GuidedInsightPanel';
 import { QuerySelectorPanel } from './guided-analysis/QuerySelectorPanel';
 import { GuidedResultTable } from './guided-analysis/GuidedResultTable';
 import { GuidedSummaryCards } from './guided-analysis/GuidedSummaryCards';
+import { UseCaseDescriptionAccordion } from './guided-analysis/UseCaseDescriptionAccordion';
+import { UseCaseMethodsModal } from './guided-analysis/UseCaseMethodsModal';
 import { VisualizationRendererRegistry } from './guided-analysis/VisualizationRendererRegistry';
 
 interface GuidedAnalysisPageProps {
@@ -325,15 +327,22 @@ export function GuidedAnalysisPage({ onCompoundSelect }: GuidedAnalysisPageProps
         <div className="space-y-4">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-3">
             <h3 className="text-xl font-semibold text-gray-900">{selectedQuery.title}</h3>
-            <p className="text-sm text-gray-700">{selectedQuery.question}</p>
-            <p className="text-sm text-gray-600">{selectedQuery.description}</p>
             <p className="text-sm text-gray-500">
               Dataset: {selectedQuery.dataset}
               {execution?.meta?.execution_ms !== undefined ? ` | execution ${execution.meta.execution_ms} ms` : ''}
+              {execution?.meta?.threshold_basis ? ` | thresholds: ${execution.meta.threshold_basis}` : ''}
+              {execution?.meta?.x_threshold !== undefined && execution?.meta?.y_threshold !== undefined
+                ? ` (x=${execution.meta.x_threshold}, y=${execution.meta.y_threshold})`
+                : ''}
             </p>
             <GuidedSummaryCards cards={execution?.summary_cards || []} />
             <GuidedInsightPanel insights={execution?.insights || []} />
           </div>
+
+          <UseCaseDescriptionAccordion
+            content={selectedQuery.use_case_description}
+            headerAction={<UseCaseMethodsModal content={selectedQuery.methods_modal} />}
+          />
 
           <GuidedFiltersBar
             filters={selectedQuery.filters}

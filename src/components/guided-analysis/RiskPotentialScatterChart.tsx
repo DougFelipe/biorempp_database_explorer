@@ -5,6 +5,7 @@ interface RiskPotentialScatterChartProps {
   points: GuidedScatterPoint[];
   xThreshold: number;
   yThreshold: number;
+  xScaleMode?: 'log10p1' | 'linear';
   yMetricLabel?: string;
   onSelectCompound: (cpd: string) => void;
 }
@@ -33,6 +34,13 @@ function xScale(value: number, max: number) {
   return MARGIN.left + (value / safeMax) * PLOT_WIDTH;
 }
 
+function toXDomainValue(rawValue: number, mode: 'log10p1' | 'linear') {
+  if (mode === 'log10p1') {
+    return Math.log10(Math.max(0, rawValue) + 1);
+  }
+  return rawValue;
+}
+
 function yScale(value: number) {
   const clamped = Math.max(0, Math.min(1, value));
   return MARGIN.top + (1 - clamped) * PLOT_HEIGHT;
@@ -50,6 +58,7 @@ export function RiskPotentialScatterChart({
   points,
   xThreshold,
   yThreshold,
+  xScaleMode = 'linear',
   yMetricLabel = 'toxicity_risk_mean',
   onSelectCompound,
 }: RiskPotentialScatterChartProps) {
@@ -69,10 +78,11 @@ export function RiskPotentialScatterChart({
     return map;
   }, [classList]);
 
-  const xMax = useMemo(
+  const xMaxRaw = useMemo(
     () => Math.max(xThreshold, ...points.map((point) => point.gene_count), 1),
     [points, xThreshold]
   );
+  const xMax = useMemo(() => toXDomainValue(xMaxRaw, xScaleMode), [xMaxRaw, xScaleMode]);
   const pathwayMin = useMemo(
     () => Math.min(...points.map((point) => point.pathway_count), 0),
     [points]
@@ -83,9 +93,17 @@ export function RiskPotentialScatterChart({
   );
 
   const xTicks = useMemo(() => {
-    const tickCount = 6;
-    return Array.from({ length: tickCount + 1 }, (_, idx) => Math.round((idx / tickCount) * xMax));
-  }, [xMax]);
+    if (xScaleMode === 'linear') {
+      const tickCount = 6;
+      return Array.from({ length: tickCount + 1 }, (_, idx) => Math.round((idx / tickCount) * xMaxRaw));
+    }
+
+    const candidates = [0, 1, 2, 5, 10, 20, 50, 100, 200, 300, 500, 1000];
+    const values = candidates.filter((value) => value <= xMaxRaw);
+    values.push(Math.round(xThreshold));
+    values.push(Math.round(xMaxRaw));
+    return [...new Set(values.filter((value) => value >= 0))].sort((a, b) => a - b);
+  }, [xMaxRaw, xScaleMode, xThreshold]);
 
   const yTicks = [0, 0.2, 0.4, 0.6, 0.8, 1];
 
@@ -93,7 +111,7 @@ export function RiskPotentialScatterChart({
     return <p className="text-sm text-gray-500">No compounds with toxicity risk available for scatter plot.</p>;
   }
 
-  const thresholdX = xScale(xThreshold, xMax);
+  const thresholdX = xScale(toXDomainValue(xThreshold, xScaleMode), xMax);
   const thresholdY = yScale(yThreshold);
 
   return (
@@ -119,7 +137,7 @@ export function RiskPotentialScatterChart({
         />
 
         {xTicks.map((tick) => {
-          const x = xScale(tick, xMax);
+          const x = xScale(toXDomainValue(tick, xScaleMode), xMax);
           return (
             <g key={`x-${tick}`}>
               <line x1={x} y1={MARGIN.top + PLOT_HEIGHT} x2={x} y2={MARGIN.top + PLOT_HEIGHT + 5} stroke="#94a3b8" />
@@ -175,7 +193,7 @@ export function RiskPotentialScatterChart({
         </text>
 
         {points.map((point) => {
-          const cx = xScale(point.gene_count, xMax);
+          const cx = xScale(toXDomainValue(point.gene_count, xScaleMode), xMax);
           const cy = yScale(point.y_value);
           const radius = radiusScale(point.pathway_count, pathwayMin, pathwayMax);
           const classKey = point.compoundclass || 'Unclassified';
@@ -212,7 +230,9 @@ export function RiskPotentialScatterChart({
           textAnchor="middle"
           className="fill-gray-700 text-[12px] font-medium"
         >
-          Bioremediation Potential (gene_count)
+          {xScaleMode === 'log10p1'
+            ? 'Bioremediation Potential (log10(gene_count + 1))'
+            : 'Bioremediation Potential (gene_count)'}
         </text>
         <text
           transform={`translate(18 ${MARGIN.top + PLOT_HEIGHT / 2}) rotate(-90)`}

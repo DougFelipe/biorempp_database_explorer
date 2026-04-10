@@ -46,19 +46,24 @@ function renderScatter(
   data: GuidedScatterVisualizationData,
   onCompoundSelect: (cpd: string) => void
 ) {
+  const computedSubtitle = [
+    visualization.subtitle || `x=${data.x_field}, y=${data.y_field}`,
+    `x_scale=${data.x_scale}`,
+    `thresholds x=${data.x_threshold}, y=${data.y_threshold}`,
+    `basis=${data.threshold_basis}`,
+  ].join(' | ');
+
   return (
     <ChartCard
       key={visualization.id}
       title={visualization.title}
-      subtitle={
-        visualization.subtitle ||
-        `x=${data.x_field}, y=${data.y_field}, thresholds x=${data.x_threshold}, y=${data.y_threshold}`
-      }
+      subtitle={computedSubtitle}
     >
       <RiskPotentialScatterChart
         points={data.points}
         xThreshold={data.x_threshold}
         yThreshold={data.y_threshold}
+        xScaleMode={data.x_scale}
         yMetricLabel={data.y_metric_label}
         onSelectCompound={onCompoundSelect}
       />
@@ -110,4 +115,3 @@ export function VisualizationRendererRegistry({
     </div>
   );
 }
-
