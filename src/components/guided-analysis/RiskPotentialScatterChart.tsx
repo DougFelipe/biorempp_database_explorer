@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import type { GuidedUc3Point } from './QueryExecutionEngine';
+import type { GuidedScatterPoint } from '../../types/guided';
 
 interface RiskPotentialScatterChartProps {
-  points: GuidedUc3Point[];
+  points: GuidedScatterPoint[];
   xThreshold: number;
   yThreshold: number;
   yMetricLabel?: string;

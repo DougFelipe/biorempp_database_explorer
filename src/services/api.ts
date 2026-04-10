@@ -19,6 +19,12 @@ import type {
   PaginationParams,
   PaginatedResponse,
 } from '../types/database';
+import type {
+  GuidedCatalogResponse,
+  GuidedExecuteRequest,
+  GuidedExecutionResponse,
+  GuidedQueryOptionsResponse,
+} from '../types/guided';
 
 function buildQuery(params: Record<string, unknown>) {
   const searchParams = new URLSearchParams();
@@ -210,6 +216,35 @@ export async function getToxicityEndpoints(): Promise<string[]> {
 
 export async function getToxicityLabels(endpoint?: string): Promise<string[]> {
   return fetchJson(`/api/meta/toxicity/labels${buildQuery({ endpoint })}`);
+}
+
+export async function getGuidedCatalog(): Promise<GuidedCatalogResponse> {
+  return fetchJson('/api/guided/catalog');
+}
+
+export async function getGuidedQueryOptions(
+  queryId: string,
+  selectedFilters: Record<string, unknown> = {}
+): Promise<GuidedQueryOptionsResponse> {
+  return fetchJson(`/api/guided/queries/${encodeURIComponent(queryId)}/options${buildQuery(selectedFilters)}`);
+}
+
+export async function executeGuidedQuery(
+  queryId: string,
+  payload: GuidedExecuteRequest = {}
+): Promise<GuidedExecutionResponse> {
+  const response = await fetch(`/api/guided/queries/${encodeURIComponent(queryId)}/execute`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed: ${response.status}`);
+  }
+  return response.json() as Promise<GuidedExecutionResponse>;
 }
 
 export async function exportCompoundsToCSV(filters: CompoundFilters = {}): Promise<string> {
