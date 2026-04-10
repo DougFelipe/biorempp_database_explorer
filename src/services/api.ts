@@ -4,6 +4,7 @@ import type {
   CompoundMetadata,
   GeneSummary,
   PathwaySummary,
+  PathwayDetailOverviewResponse,
   ToxicityEndpoint,
   CompoundGeneCardRow,
   CompoundPathwayCardRow,
@@ -128,6 +129,18 @@ export async function getPathways(
       ...filters,
       page: pagination.page,
       pageSize: pagination.pageSize,
+    })}`
+  );
+}
+
+export async function getPathwayDetailOverview(
+  pathway: string,
+  options: { source?: string } = {}
+): Promise<PathwayDetailOverviewResponse> {
+  return fetchJson(
+    `/api/pathways/detail/overview${buildQuery({
+      pathway,
+      source: options.source,
     })}`
   );
 }
