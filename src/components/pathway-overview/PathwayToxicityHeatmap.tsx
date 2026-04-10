@@ -41,6 +41,7 @@ export function PathwayToxicityHeatmap({ matrix }: PathwayToxicityHeatmapProps) 
   const cellMap = new Map(
     matrix.cells.map((cell) => [`${cell.cpd}|${cell.endpoint}`, cell] as const)
   );
+  const minTableWidth = Math.max(760, 280 + endpointOrder.length * 52);
 
   const compounds = matrix.compounds
     .map((compound) => {
@@ -85,7 +86,10 @@ export function PathwayToxicityHeatmap({ matrix }: PathwayToxicityHeatmapProps) 
         </div>
 
         <div className="max-h-[480px] overflow-auto">
-          <table className="w-full table-fixed border-separate border-spacing-1 min-w-[1100px]">
+          <table
+            className="w-full table-fixed border-separate border-spacing-1"
+            style={{ minWidth: `${minTableWidth}px` }}
+          >
             <thead>
               <tr>
                 <th className="sticky top-0 left-0 z-30 bg-white px-2 py-1 text-left text-[11px] font-medium text-gray-600 w-60">

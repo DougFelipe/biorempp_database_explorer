@@ -322,7 +322,7 @@ export function GuidedAnalysisPage({ onCompoundSelect }: GuidedAnalysisPageProps
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+      <div className="grid grid-cols-1 items-start lg:grid-cols-[280px_minmax(0,1fr)] gap-6">
         <QuerySelectorPanel
           categories={catalog.categories}
           queries={catalog.queries}
@@ -330,7 +330,7 @@ export function GuidedAnalysisPage({ onCompoundSelect }: GuidedAnalysisPageProps
           onSelect={setSelectedQueryId}
         />
 
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-3">
             <h3 className="text-xl font-semibold text-gray-900">{selectedQuery.title}</h3>
             <p className="text-sm text-gray-500">

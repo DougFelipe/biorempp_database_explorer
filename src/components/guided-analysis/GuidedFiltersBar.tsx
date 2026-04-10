@@ -37,7 +37,7 @@ function updateRangeValue(
 
 function renderSearchFilter(filter: GuidedFilterDefinition, value: GuidedFilterValue | undefined, onChange: GuidedFiltersBarProps['onChange']) {
   return (
-    <div key={filter.id} className="min-w-[220px] flex-1">
+    <div key={filter.id} className="w-full xl:col-span-2">
       <label className="block text-xs font-medium text-gray-600 mb-1">{filter.label}</label>
       <input
         type="text"
@@ -59,7 +59,7 @@ function renderSelectFilter(
   const options = optionsByFilter[filter.id] || [];
   const current = typeof value === 'string' ? value : '';
   return (
-    <div key={filter.id} className="min-w-[200px] flex-1">
+    <div key={filter.id} className="w-full">
       <label className="block text-xs font-medium text-gray-600 mb-1">{filter.label}</label>
       <select
         value={current}
@@ -85,7 +85,7 @@ function renderRangeFilter(
   const current = toRangeValue(value);
 
   return (
-    <div key={filter.id} className="min-w-[260px]">
+    <div key={filter.id} className="w-full">
       <label className="block text-xs font-medium text-gray-600 mb-1">{filter.label}</label>
       <div className="grid grid-cols-2 gap-2">
         <input
@@ -116,10 +116,12 @@ function renderRangeFilter(
 function renderToggleFilter(filter: GuidedFilterDefinition, value: GuidedFilterValue | undefined, onChange: GuidedFiltersBarProps['onChange']) {
   const checked = value === true;
   return (
-    <label key={filter.id} className="inline-flex items-center gap-2 rounded border border-gray-200 px-3 py-2 bg-gray-50">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(filter.id, event.target.checked)} />
-      <span className="text-sm text-gray-700">{filter.label}</span>
-    </label>
+    <div key={filter.id} className="w-full flex items-end">
+      <label className="inline-flex items-center gap-2 rounded border border-gray-300 px-3 py-2 bg-white min-h-[42px] w-full">
+        <input type="checkbox" checked={checked} onChange={(event) => onChange(filter.id, event.target.checked)} />
+        <span className="text-sm text-gray-700">{filter.label}</span>
+      </label>
+    </div>
   );
 }
 
@@ -141,7 +143,7 @@ export function GuidedFiltersBar({ filters, values, optionsByFilter, onChange, o
         </button>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 items-end">
         {filters.map((filter) => {
           const value = values[filter.id];
           if (filter.type === 'search') {
@@ -162,4 +164,3 @@ export function GuidedFiltersBar({ filters, values, optionsByFilter, onChange, o
     </section>
   );
 }
-
