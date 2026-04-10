@@ -1,0 +1,150 @@
+version: v1
+note: Query recipes are static examples for reproducibility and do not reflect active UI filters.
+queries:
+  uc1_top_bioremediation_compounds:
+    button_label: View Queries
+    title: UC-1 Query Recipes (Top Bioremediation Compounds)
+    introduction: Reproduce the ranking used in UC-1 using the same canonical compound_summary table.
+    sqlite:
+      description: Top compounds by KO count with deterministic tie-break.
+      query: |
+        SELECT
+          cpd,
+          compoundname,
+          compoundclass,
+          ko_count,
+          gene_count,
+          pathway_count
+        FROM compound_summary
+        ORDER BY ko_count DESC, cpd ASC
+        LIMIT 10;
+    python:
+      description: Python sqlite3 script to run the same ranking query.
+      script: |
+        import sqlite3
+
+        db_path = "data/biorempp.sqlite"
+        query = """
+        SELECT
+          cpd,
+          compoundname,
+          compoundclass,
+          ko_count,
+          gene_count,
+          pathway_count
+        FROM compound_summary
+        ORDER BY ko_count DESC, cpd ASC
+        LIMIT 10;
+        """
+
+        with sqlite3.connect(db_path) as conn:
+          rows = conn.execute(query).fetchall()
+          for row in rows:
+            print(row)
+    notes:
+      - This recipe is exploratory and should be interpreted as annotation-based prioritization.
+
+  uc3_risk_vs_bioremediation_potential:
+    button_label: View Queries
+    title: UC-3 Query Recipes (Risk vs Bioremediation Potential)
+    introduction: Reproduce the UC-3 scatter base points and dynamic P75 thresholds on compound_summary.
+    sqlite:
+      description: Compute valid points (non-null risk), P75 thresholds, and quadrant assignment.
+      query: |
+        WITH scope AS (
+          SELECT
+            cpd,
+            compoundname,
+            compoundclass,
+            gene_count,
+            pathway_count,
+            toxicity_risk_mean AS y_value
+          FROM compound_summary
+          WHERE toxicity_risk_mean IS NOT NULL
+        ),
+        ranked AS (
+          SELECT
+            *,
+            ROW_NUMBER() OVER (ORDER BY gene_count) AS rn_x,
+            ROW_NUMBER() OVER (ORDER BY y_value) AS rn_y,
+            COUNT(*) OVER () AS n
+          FROM scope
+        ),
+        thresholds AS (
+          SELECT
+            MAX(CASE WHEN rn_x = CAST((n - 1) * 0.75 AS INT) + 1 THEN gene_count END) AS x_threshold,
+            MAX(CASE WHEN rn_y = CAST((n - 1) * 0.75 AS INT) + 1 THEN y_value END) AS y_threshold
+          FROM ranked
+        )
+        SELECT
+          r.cpd,
+          r.compoundname,
+          r.compoundclass,
+          r.gene_count,
+          r.pathway_count,
+          r.y_value,
+          t.x_threshold,
+          t.y_threshold,
+          CASE
+            WHEN r.gene_count >= t.x_threshold AND r.y_value >= t.y_threshold THEN 'top_right'
+            WHEN r.gene_count <  t.x_threshold AND r.y_value >= t.y_threshold THEN 'top_left'
+            WHEN r.gene_count >= t.x_threshold AND r.y_value <  t.y_threshold THEN 'bottom_right'
+            ELSE 'bottom_left'
+          END AS quadrant
+        FROM ranked r
+        CROSS JOIN thresholds t
+        ORDER BY r.cpd ASC;
+    python:
+      description: Python sqlite3 script to run UC-3 base point extraction with thresholds.
+      script: |
+        import sqlite3
+
+        db_path = "data/biorempp.sqlite"
+        query = """
+        WITH scope AS (
+          SELECT
+            cpd,
+            compoundname,
+            compoundclass,
+            gene_count,
+            pathway_count,
+            toxicity_risk_mean AS y_value
+          FROM compound_summary
+          WHERE toxicity_risk_mean IS NOT NULL
+        ),
+        ranked AS (
+          SELECT
+            *,
+            ROW_NUMBER() OVER (ORDER BY gene_count) AS rn_x,
+            ROW_NUMBER() OVER (ORDER BY y_value) AS rn_y,
+            COUNT(*) OVER () AS n
+          FROM scope
+        ),
+        thresholds AS (
+          SELECT
+            MAX(CASE WHEN rn_x = CAST((n - 1) * 0.75 AS INT) + 1 THEN gene_count END) AS x_threshold,
+            MAX(CASE WHEN rn_y = CAST((n - 1) * 0.75 AS INT) + 1 THEN y_value END) AS y_threshold
+          FROM ranked
+        )
+        SELECT
+          r.cpd,
+          r.compoundname,
+          r.compoundclass,
+          r.gene_count,
+          r.pathway_count,
+          r.y_value,
+          t.x_threshold,
+          t.y_threshold
+        FROM ranked r
+        CROSS JOIN thresholds t
+        ORDER BY r.cpd ASC;
+        """
+
+        with sqlite3.connect(db_path) as conn:
+          rows = conn.execute(query).fetchall()
+          print("rows:", len(rows))
+          for row in rows[:10]:
+            print(row)
+    notes:
+      - Thresholds are percentile-based and context-dependent in the app.
+      - This recipe is intended for exploratory reproducibility, not causal inference.
