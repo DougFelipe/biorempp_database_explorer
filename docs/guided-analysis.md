@@ -29,6 +29,34 @@ Guided Analysis now runs from declarative YAML files compiled into server-side J
    - `npm run typecheck`
    - `npm run build`
 
+## Use Case Description Block (Required)
+
+Each query YAML must define a `use_case_description` block consumed by the UI accordion:
+
+- `scientific_question` (required string)
+- `description` (required string)
+- `visual_elements` (optional array of `{ title, description }`)
+- `interpretation` (required array of short statements)
+
+Editorial guidance for `interpretation`:
+
+- Prefer exploratory/inferential language (e.g., hypothesis generation, analytical indication).
+- Avoid causal or confirmatory claims without experimental support.
+- Keep statements concise, explicit, and scoped to the current filtered context.
+
+## Methods Modal Block (Required)
+
+Each query YAML must define a `methods_modal` block used by the `View Methods` modal in Guided Analysis:
+
+- `button_label` (required string)
+- `title` (required string)
+- `introduction` (required string)
+- `steps` (required array with at least one item)
+- each step: `title` (required), `description` (required), `bullets` (optional `string[]`)
+- `footer_note` (optional string)
+
+This content is declarative and static per use case (not execution-dependent).
+
 ## Filter Safety Model
 
 YAML is declarative only. SQL is never built from arbitrary YAML fragments.
@@ -42,4 +70,3 @@ YAML is declarative only. SQL is never built from arbitrary YAML fragments.
 - Guided execution is backend-first and read-only.
 - Existing APIs outside Guided remain unchanged.
 - The frontend shell is query-agnostic and driven by catalog + execution contract.
-
