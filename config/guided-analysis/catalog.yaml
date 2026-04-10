@@ -3,6 +3,11 @@ title: Guided Analysis
 categories:
   - id: compound_analysis
     label: Compound Analysis
+  - id: pathway_analysis
+    label: Pathway Analysis
 query_order:
   - uc1_top_bioremediation_compounds
+  - uc2_most_toxic_compounds
+  - uc4_regulated_by_agency
+  - uc5_pathways_functional_coverage
   - uc3_risk_vs_bioremediation_potential

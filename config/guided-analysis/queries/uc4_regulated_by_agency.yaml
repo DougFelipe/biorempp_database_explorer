@@ -1,0 +1,126 @@
+id: uc4_regulated_by_agency
+category: compound_analysis
+title: Regulated Compounds by Agency
+question: Which compounds are classified by EPA, ATSDR, or IARC categories?
+description: Regulatory-oriented compound ranking filtered by selected reference agency labels.
+dataset: compound_summary
+executor: uc_regulated_by_agency
+
+use_case_description:
+  scientific_question: Which compounds are annotated under selected regulatory agency lists (EPA, ATSDR, IARC1, IARC2A, IARC2B)?
+  description: This use case filters compounds by regulatory reference labels from compound_reference_map and ranks them by reference annotation density.
+  visual_elements:
+    - title: Ranking Table
+      description: Lists compounds matching the selected agency filter with reference counts and core annotation metrics.
+    - title: Agency Barplot
+      description: Shows distinct compound counts by agency in the active regulatory selection scope.
+  interpretation:
+    - The output indicates regulatory annotation presence in the integrated dataset and can support exploratory prioritization.
+    - Agency labels should be interpreted as reference coverage context, not as direct evidence of hazard magnitude.
+    - This view is intended for exploratory analysis and hypothesis generation, requiring domain validation for downstream decisions.
+
+methods_modal:
+  button_label: View Methods
+  title: "UC-4: Regulated Compounds by Agency"
+  introduction: This workflow filters and ranks compounds by regulatory agency annotations recorded in reference maps.
+  steps:
+    - title: Base Scope Filtering
+      description: The executor resolves typed scope filters (search, class, gene/pathway ranges) over compound_summary.
+    - title: Agency Filter Application
+      description: Regulatory filtering is applied through compound_reference_map using the selected agency list.
+      bullets:
+        - No IARC aggregation is applied.
+        - IARC labels remain independent (IARC1, IARC2A, IARC2B).
+    - title: Ranking Logic
+      description: Matching compounds are ranked by reference_count descending with deterministic CPD tie-break.
+    - title: Agency Distribution
+      description: A barplot summarizes distinct compound counts by agency for the active selection.
+    - title: Exploratory Use
+      description: Results are intended for regulatory relevance exploration and triage support.
+  footer_note: Regulatory labels in this use case represent annotation presence and should be interpreted in exploratory context.
+
+defaults:
+  page_size: 10
+  filters: {}
+
+executor_config: {}
+
+filters:
+  - id: reference_ag
+    type: select
+    label: Regulatory Agency
+    provider:
+      type: meta_endpoint
+      endpoint: /api/meta/reference-ags
+  - id: search
+    type: search
+    label: Search Compound
+    placeholder: Name or CPD
+  - id: compoundclass
+    type: select
+    label: Compound Class
+    provider:
+      type: meta_endpoint
+      endpoint: /api/meta/compound-classes
+  - id: gene_count
+    type: number_range
+    label: Gene Count
+    min: 0
+  - id: pathway_count
+    type: number_range
+    label: Pathway Annotations
+    min: 0
+
+summary_cards:
+  - id: compounds_in_scope
+    label: Compounds in Scope
+    value_key: compounds_in_scope
+  - id: regulated_compounds
+    label: Regulated Compounds
+    value_key: regulated_compounds
+  - id: selected_agency
+    label: Selected Agency
+    value_key: selected_agency
+
+visualizations:
+  - id: uc4_agency_bar
+    type: horizontal_bar
+    title: Regulatory Distribution by Agency
+    subtitle: Distinct compounds by agency in active scope
+    data_key: agency_bar
+
+table:
+  id: uc4_table
+  title: Compounds with regulatory annotations
+  subtitle: Ranked by reference count under selected agency scope
+  row_click_field: cpd
+  empty_message: No compounds found for selected regulatory filters.
+  columns:
+    - id: rank
+      label: Rank
+      type: number
+    - id: cpd
+      label: Compound ID
+      type: compound_link
+    - id: compoundname
+      label: Name
+      type: text
+    - id: compoundclass
+      label: Class
+      type: text
+    - id: matched_references
+      label: Matched References
+      type: text
+    - id: reference_count
+      label: Reference Count
+      type: number
+    - id: gene_count
+      label: Gene Count
+      type: number
+    - id: pathway_count
+      label: Pathway Annotations
+      type: number
+
+insights:
+  - id: uc4_insight
+    text: Regulatory-annotated compounds in this view indicate exploratory relevance for agency-focused prioritization.

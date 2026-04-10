@@ -174,9 +174,33 @@ export interface GuidedHorizontalBarVisualizationData {
   empty_message: string;
 }
 
+export interface GuidedHeatmapMatrixCompound {
+  cpd: string;
+  compoundname: string | null;
+  compoundclass?: string | null;
+  y_value?: number | null;
+  endpoint_used?: string | null;
+}
+
+export interface GuidedHeatmapMatrixCell {
+  cpd: string;
+  endpoint: string;
+  label: string | null;
+  value: number | null;
+  risk_bucket: string;
+}
+
+export interface GuidedHeatmapMatrixVisualizationData {
+  compounds: GuidedHeatmapMatrixCompound[];
+  endpoints: string[];
+  cells: GuidedHeatmapMatrixCell[];
+  total_compounds_in_scope?: number;
+}
+
 export type GuidedVisualizationData =
   | GuidedHorizontalBarVisualizationData
   | GuidedScatterVisualizationData
+  | GuidedHeatmapMatrixVisualizationData
   | Record<string, unknown>
   | null;
 

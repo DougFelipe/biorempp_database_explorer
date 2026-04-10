@@ -1,7 +1,9 @@
 import { ChartCard } from '../charts/ChartCard';
 import { HorizontalBarChart, type HorizontalBarItem } from '../charts/HorizontalBarChart';
 import { RiskPotentialScatterChart } from './RiskPotentialScatterChart';
+import { GuidedToxicityHeatmapMatrix } from './GuidedToxicityHeatmapMatrix';
 import type {
+  GuidedHeatmapMatrixVisualizationData,
   GuidedScatterVisualizationData,
   GuidedVisualizationResult,
   GuidedHorizontalBarVisualizationData,
@@ -25,6 +27,14 @@ function isScatterData(data: unknown): data is GuidedScatterVisualizationData {
     return false;
   }
   return Array.isArray((data as GuidedScatterVisualizationData).points);
+}
+
+function isHeatmapData(data: unknown): data is GuidedHeatmapMatrixVisualizationData {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return false;
+  }
+  const candidate = data as GuidedHeatmapMatrixVisualizationData;
+  return Array.isArray(candidate.compounds) && Array.isArray(candidate.endpoints) && Array.isArray(candidate.cells);
 }
 
 function renderHorizontalBar(
@@ -90,12 +100,10 @@ export function VisualizationRendererRegistry({
           return renderScatter(visualization, visualization.data, onCompoundSelect);
         }
 
-        if (visualization.type === 'heatmap_matrix') {
+        if (visualization.type === 'heatmap_matrix' && isHeatmapData(visualization.data)) {
           return (
             <ChartCard key={visualization.id} title={visualization.title} subtitle={visualization.subtitle || undefined}>
-              <p className="text-sm text-gray-500">
-                Heatmap renderer is ready for upcoming guided use cases.
-              </p>
+              <GuidedToxicityHeatmapMatrix matrix={visualization.data} />
             </ChartCard>
           );
         }

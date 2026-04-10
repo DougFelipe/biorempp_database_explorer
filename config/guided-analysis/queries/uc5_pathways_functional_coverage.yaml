@@ -1,0 +1,119 @@
+id: uc5_pathways_functional_coverage
+category: pathway_analysis
+title: Pathways with Highest Functional Coverage
+question: Which pathways have the highest number of associated KOs?
+description: Pathway-centric ranking by distinct KO coverage using deduplicated pathway relation data.
+dataset: compound_summary
+executor: uc_pathway_functional_coverage
+
+use_case_description:
+  scientific_question: Which pathways concentrate broader functional annotation coverage based on distinct KO associations?
+  description: This use case ranks pathways by distinct KO counts from compound_ko_pathway_rel, enabling exploratory assessment of pathway-level functional coverage.
+  visual_elements:
+    - title: Pathway Barplot
+      description: Displays top pathways ordered by distinct KO count in the active source/filter scope.
+    - title: Pathway Ranking Table
+      description: Lists pathway, source context, KO count, and compound count for detailed comparison.
+  interpretation:
+    - Higher KO coverage suggests broader annotated functional diversity for the pathway in the current scope.
+    - This ranking is exploratory and should be interpreted as annotation-based signal rather than confirmed mechanistic dominance.
+    - Source selection changes pathway ordering and should be treated as contextual view of available annotations.
+
+methods_modal:
+  button_label: View Methods
+  title: "UC-5: Pathways with Highest Functional Coverage"
+  introduction: This workflow computes pathway-level functional coverage using distinct KO associations from the deduplicated runtime relation table.
+  steps:
+    - title: Scope Resolution
+      description: Pathway relations are filtered by source and pathway text, then grouped by pathway.
+    - title: Functional Coverage Metric
+      description: Coverage is measured as COUNT(DISTINCT ko) per pathway.
+      bullets:
+        - This avoids inflation from repeated tidy rows.
+    - title: Optional Range Filters
+      description: KO count and compound count ranges are applied on grouped metrics.
+    - title: Ranking and Rendering
+      description: Results are sorted by ko_count descending and rendered as barplot and paginated table.
+    - title: Exploratory Interpretation
+      description: Outputs support pathway importance hypotheses under current annotation scope.
+  footer_note: Results are annotation-centric and intended for exploratory analysis, not causal confirmation.
+
+defaults:
+  page_size: 10
+  filters:
+    source: all
+
+executor_config:
+  bar_top_n: 10
+
+filters:
+  - id: source
+    type: select
+    label: Source
+    provider:
+      type: static
+      options:
+        - value: all
+          label: All sources
+        - value: KEGG
+          label: KEGG
+        - value: HADEG
+          label: HADEG
+        - value: COMPOUND_PATHWAY
+          label: COMPOUND_PATHWAY
+  - id: pathway
+    type: search
+    label: Search Pathway
+    placeholder: Pathway name
+  - id: ko_count
+    type: number_range
+    label: KO Count
+    min: 0
+  - id: compound_count
+    type: number_range
+    label: Compound Count
+    min: 0
+
+summary_cards:
+  - id: pathways_in_scope
+    label: Pathways in Scope
+    value_key: pathways_in_scope
+  - id: max_ko_count
+    label: Max KO Count
+    value_key: max_ko_count
+  - id: selected_source
+    label: Selected Source
+    value_key: selected_source
+
+visualizations:
+  - id: uc5_bar
+    type: horizontal_bar
+    title: Pathways by Functional Coverage (KO)
+    subtitle: Top pathways by distinct KO count
+    data_key: bar_items
+
+table:
+  id: uc5_table
+  title: Pathway functional coverage ranking
+  subtitle: Ranked by distinct KO count
+  empty_message: No pathways found for selected filters.
+  columns:
+    - id: rank
+      label: Rank
+      type: number
+    - id: pathway
+      label: Pathway
+      type: text
+    - id: source
+      label: Source
+      type: text
+    - id: ko_count
+      label: KO Count
+      type: number
+    - id: compound_count
+      label: Compound Count
+      type: number
+
+insights:
+  - id: uc5_insight
+    text: Pathways at the top of this ranking indicate broader KO-level functional coverage in the selected source scope.
