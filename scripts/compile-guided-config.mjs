@@ -17,6 +17,7 @@ const VALID_FILTER_TYPES = new Set(['select', 'number_range', 'search', 'depende
 const VALID_PROVIDER_TYPES = new Set(['meta_endpoint', 'static', 'query_derived']);
 const VALID_VIS_TYPES = new Set(['horizontal_bar', 'scatter_quadrant', 'heatmap_matrix', 'table']);
 const VALID_COLUMN_TYPES = new Set(['text', 'number', 'compound_link']);
+const MIN_INTERPRETATION_STATEMENT_LENGTH = 20;
 
 function fail(message) {
   throw new Error(`guided-config: ${message}`);
@@ -194,6 +195,106 @@ function normalizeInsight(insight, queryId, idx) {
   };
 }
 
+function normalizeUseCaseDescription(rawUseCaseDescription, queryId) {
+  assertObject(rawUseCaseDescription, `queries/${queryId}.yaml use_case_description`);
+
+  assertString(
+    rawUseCaseDescription.scientific_question,
+    `queries/${queryId}.yaml use_case_description.scientific_question`
+  );
+  assertString(rawUseCaseDescription.description, `queries/${queryId}.yaml use_case_description.description`);
+  assertArray(rawUseCaseDescription.interpretation, `queries/${queryId}.yaml use_case_description.interpretation`);
+
+  const interpretation = rawUseCaseDescription.interpretation.map((item, idx) => {
+    assertString(
+      item,
+      `queries/${queryId}.yaml use_case_description.interpretation[${idx}]`
+    );
+    const trimmed = item.trim();
+    if (trimmed.length < MIN_INTERPRETATION_STATEMENT_LENGTH) {
+      fail(
+        `queries/${queryId}.yaml use_case_description.interpretation[${idx}] must have at least ${MIN_INTERPRETATION_STATEMENT_LENGTH} characters`
+      );
+    }
+    return trimmed;
+  });
+
+  if (interpretation.length === 0) {
+    fail(`queries/${queryId}.yaml use_case_description.interpretation must include at least one item`);
+  }
+
+  let visualElements;
+  if (rawUseCaseDescription.visual_elements !== undefined) {
+    assertArray(rawUseCaseDescription.visual_elements, `queries/${queryId}.yaml use_case_description.visual_elements`);
+    visualElements = rawUseCaseDescription.visual_elements.map((item, idx) => {
+      assertObject(item, `queries/${queryId}.yaml use_case_description.visual_elements[${idx}]`);
+      assertString(
+        item.title,
+        `queries/${queryId}.yaml use_case_description.visual_elements[${idx}].title`
+      );
+      assertString(
+        item.description,
+        `queries/${queryId}.yaml use_case_description.visual_elements[${idx}].description`
+      );
+      return {
+        title: item.title.trim(),
+        description: item.description.trim(),
+      };
+    });
+  }
+
+  return {
+    scientific_question: rawUseCaseDescription.scientific_question.trim(),
+    description: rawUseCaseDescription.description.trim(),
+    visual_elements: visualElements,
+    interpretation,
+  };
+}
+
+function normalizeMethodsModal(rawMethodsModal, queryId) {
+  assertObject(rawMethodsModal, `queries/${queryId}.yaml methods_modal`);
+  assertString(rawMethodsModal.button_label, `queries/${queryId}.yaml methods_modal.button_label`);
+  assertString(rawMethodsModal.title, `queries/${queryId}.yaml methods_modal.title`);
+  assertString(rawMethodsModal.introduction, `queries/${queryId}.yaml methods_modal.introduction`);
+  assertArray(rawMethodsModal.steps, `queries/${queryId}.yaml methods_modal.steps`);
+
+  if (rawMethodsModal.steps.length === 0) {
+    fail(`queries/${queryId}.yaml methods_modal.steps must include at least one step`);
+  }
+
+  const steps = rawMethodsModal.steps.map((step, idx) => {
+    assertObject(step, `queries/${queryId}.yaml methods_modal.steps[${idx}]`);
+    assertString(step.title, `queries/${queryId}.yaml methods_modal.steps[${idx}].title`);
+    assertString(step.description, `queries/${queryId}.yaml methods_modal.steps[${idx}].description`);
+
+    let bullets;
+    if (step.bullets !== undefined) {
+      assertArray(step.bullets, `queries/${queryId}.yaml methods_modal.steps[${idx}].bullets`);
+      bullets = step.bullets.map((bullet, bulletIdx) => {
+        assertString(
+          bullet,
+          `queries/${queryId}.yaml methods_modal.steps[${idx}].bullets[${bulletIdx}]`
+        );
+        return bullet.trim();
+      });
+    }
+
+    return {
+      title: step.title.trim(),
+      description: step.description.trim(),
+      bullets,
+    };
+  });
+
+  return {
+    button_label: rawMethodsModal.button_label.trim(),
+    title: rawMethodsModal.title.trim(),
+    introduction: rawMethodsModal.introduction.trim(),
+    steps,
+    footer_note: typeof rawMethodsModal.footer_note === 'string' ? rawMethodsModal.footer_note.trim() : undefined,
+  };
+}
+
 function normalizeQuery(rawQuery, sourcePath) {
   assertObject(rawQuery, sourcePath);
 
@@ -227,6 +328,8 @@ function normalizeQuery(rawQuery, sourcePath) {
   const insights = Array.isArray(rawQuery.insights)
     ? rawQuery.insights.map((insight, idx) => normalizeInsight(insight, queryId, idx))
     : [];
+  const useCaseDescription = normalizeUseCaseDescription(rawQuery.use_case_description, queryId);
+  const methodsModal = normalizeMethodsModal(rawQuery.methods_modal, queryId);
 
   return {
     id: queryId,
@@ -240,6 +343,8 @@ function normalizeQuery(rawQuery, sourcePath) {
     executor_config:
       rawQuery.executor_config && typeof rawQuery.executor_config === 'object' ? rawQuery.executor_config : {},
     filters,
+    use_case_description: useCaseDescription,
+    methods_modal: methodsModal,
     summary_cards: summaryCards,
     visualizations,
     table,

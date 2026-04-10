@@ -6,20 +6,60 @@ description: Scatter plot using gene_count (potential) vs toxicity (risk), with 
 dataset: compound_summary
 executor: uc_risk_potential_scatter
 
+use_case_description:
+  scientific_question: Which compounds combine higher bioremediation potential and higher predicted toxicological risk under the selected endpoint context?
+  description: This view compares potential (gene_count) and predicted risk (toxicity_risk_mean or selected endpoint) to support exploratory prioritization across compounds.
+  visual_elements:
+    - title: X-Axis (Bioremediation Potential)
+      description: Uses gene_count with selectable linear or log10(gene_count + 1) scaling to reduce outlier compression and improve cluster readability.
+    - title: Y-Axis (Predicted Risk)
+      description: Uses toxicity_risk_mean or a selected endpoint-level prediction value, depending on the endpoint filter configuration.
+    - title: Quadrant Thresholds
+      description: Vertical and horizontal cut lines are computed from P75 values in the currently filtered scope, enabling context-adaptive quadrant segmentation.
+    - title: Point Encoding
+      description: Point color represents compound class and point size maps pathway annotation count, enabling multi-variable exploratory inspection.
+  interpretation:
+    - Compounds in the top-right quadrant indicate a combination of higher predicted risk and higher annotated potential within the current filtered scope.
+    - Quadrant assignments are relative to the selected filters and percentile thresholds, so they should be interpreted as exploratory context, not fixed risk classes.
+    - This chart supports hypothesis generation and triage decisions, and should be complemented with domain review and experimental evidence.
+
+methods_modal:
+  button_label: View Methods
+  title: "UC-3: Risk vs Bioremediation Potential"
+  introduction: This workflow compares potential and risk metrics for compounds under the selected toxicity context using a quadrant-based exploratory scatter.
+  steps:
+    - title: Scope and Filter Resolution
+      description: The executor resolves typed filters (endpoint group, endpoint, class, ranges, search) over the compound_summary dataset.
+    - title: Y Metric Selection
+      description: Risk is mapped to toxicity_risk_mean by default or to a selected endpoint prediction value when endpoint filters are active.
+    - title: Null Handling
+      description: Compounds with null Y values are excluded from scatter plotting and counted explicitly in summary metadata.
+    - title: Adaptive Threshold Calculation
+      description: Quadrant cut lines are computed from P75 on filtered valid points for X and Y dimensions.
+      bullets:
+        - x_threshold = P75(gene_count in filtered scope)
+        - y_threshold = P75(selected risk metric in filtered scope)
+    - title: Scatter Encoding
+      description: Points encode class by color and pathway annotations by size, with optional X-axis scaling mode.
+      bullets:
+        - X axis supports linear and log10(gene_count + 1) display modes.
+    - title: Quadrant Prioritization Output
+      description: Top-right compounds are ranked and paginated to support exploratory triage under the active context.
+  footer_note: Quadrant placement is context-dependent and should be interpreted as exploratory prioritization, not a confirmed hazard classification.
+
 defaults:
   page_size: 10
-  x_threshold: 200
-  y_threshold: 0.5
+  x_scale: log10p1
   filters:
     endpoint_group: all
     endpoint: mean
+    x_scale: log10p1
     focus_cluster: false
 
 executor_config:
   x_field: gene_count
   y_field_default: toxicity_risk_mean
-  x_threshold: 200
-  y_threshold: 0.5
+  threshold_basis: p75_filtered_scope
   top_right_sort:
     - field: y_value
       order: desc
@@ -56,6 +96,16 @@ filters:
       source: toxicity_endpoints
       include_mean_option: true
       mean_option_label: toxicity_risk_mean (all endpoints mean)
+  - id: x_scale
+    type: select
+    label: X Axis Scale
+    provider:
+      type: static
+      options:
+        - value: log10p1
+          label: Log10 (gene_count + 1)
+        - value: linear
+          label: Linear
   - id: compoundclass
     type: select
     label: Compound Class
@@ -97,12 +147,15 @@ summary_cards:
   - id: top_right_count
     label: Top-right Quadrant
     value_key: top_right_count
+  - id: p75_thresholds
+    label: P75 Thresholds
+    value_key: thresholds_label
 
 visualizations:
   - id: uc3_scatter
     type: scatter_quadrant
     title: Risk vs Bioremediation Potential
-    subtitle: x = gene_count, y = selected risk metric
+    subtitle: x = gene_count (selectable scale), y = selected risk metric, thresholds = P75 filtered scope
     data_key: scatter_points
 
 table:

@@ -71,6 +71,32 @@ export interface GuidedInsightDefinition {
   text: string;
 }
 
+export interface GuidedUseCaseVisualElement {
+  title: string;
+  description: string;
+}
+
+export interface GuidedUseCaseDescription {
+  scientific_question: string;
+  description: string;
+  visual_elements?: GuidedUseCaseVisualElement[];
+  interpretation: string[];
+}
+
+export interface GuidedMethodsStep {
+  title: string;
+  description: string;
+  bullets?: string[];
+}
+
+export interface GuidedMethodsModal {
+  button_label: string;
+  title: string;
+  introduction: string;
+  steps: GuidedMethodsStep[];
+  footer_note?: string;
+}
+
 export interface GuidedQueryDefinition {
   id: string;
   category: string;
@@ -82,6 +108,8 @@ export interface GuidedQueryDefinition {
   defaults: Record<string, unknown>;
   executor_config: Record<string, unknown>;
   filters: GuidedFilterDefinition[];
+  use_case_description: GuidedUseCaseDescription;
+  methods_modal: GuidedMethodsModal;
   summary_cards: GuidedSummaryCardDefinition[];
   visualizations: GuidedVisualizationDefinition[];
   table: GuidedTableDefinition | null;
@@ -137,6 +165,8 @@ export interface GuidedScatterVisualizationData {
   y_field: string;
   y_metric_label: string;
   endpoint: string;
+  x_scale: 'log10p1' | 'linear';
+  threshold_basis: string;
 }
 
 export interface GuidedHorizontalBarVisualizationData {
@@ -190,6 +220,8 @@ export interface GuidedExecutionMeta {
   y_metric_label?: string;
   x_threshold?: number;
   y_threshold?: number;
+  threshold_basis?: string;
+  x_scale?: 'log10p1' | 'linear';
   focus_cluster?: boolean;
   gene_p95?: number | null;
 }
@@ -218,4 +250,3 @@ export type GuidedFilterValue =
     };
 
 export type GuidedFilterState = Record<string, GuidedFilterValue>;
-

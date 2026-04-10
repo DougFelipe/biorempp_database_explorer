@@ -15,6 +15,7 @@ const DATASET_FILTER_WHITELIST = {
     'pathway_count',
     'endpoint_group',
     'endpoint',
+    'x_scale',
     'y_value',
     'focus_cluster',
   ]),
@@ -411,8 +412,10 @@ function executeRankedMetric({ db, query, filters, page, pageSize }) {
 }
 
 function executeRiskPotentialScatter({ db, query, filters, page, pageSize }) {
-  const xThreshold = Number(query.executor_config?.x_threshold ?? query.defaults?.x_threshold ?? 200);
-  const yThreshold = Number(query.executor_config?.y_threshold ?? query.defaults?.y_threshold ?? 0.5);
+  const thresholdBasis = String(query.executor_config?.threshold_basis || 'p75_filtered_scope');
+  const defaultXScale = String(query.defaults?.x_scale || 'log10p1').toLowerCase();
+  const xScaleModeRaw = typeof filters.x_scale === 'string' ? filters.x_scale.toLowerCase() : defaultXScale;
+  const xScaleMode = xScaleModeRaw === 'linear' ? 'linear' : 'log10p1';
   const endpoint = filters.endpoint && filters.endpoint !== 'mean' ? filters.endpoint : null;
 
   const { whereSql, params } = buildCompoundWhereSql(filters);
@@ -502,6 +505,15 @@ function executeRiskPotentialScatter({ db, query, filters, page, pageSize }) {
     }
   }
 
+  const xThreshold =
+    percentile(points.map((point) => point.gene_count), 0.75) ??
+    percentile(pointsRaw.map((point) => point.gene_count), 0.75) ??
+    0;
+  const yThreshold =
+    percentile(points.map((point) => point.y_value), 0.75) ??
+    percentile(pointsRaw.map((point) => point.y_value), 0.75) ??
+    0.5;
+
   const pointsWithQuadrant = points.map((point) => ({
     ...point,
     quadrant: quadrantFor(point, xThreshold, yThreshold),
@@ -553,6 +565,7 @@ function executeRiskPotentialScatter({ db, query, filters, page, pageSize }) {
       excluded_null_y: excludedNullY,
       top_right_count: quadrantCounts.top_right,
       quadrant_sum_check: quadrantSum,
+      thresholds_label: `x(P75)=${xThreshold}, y(P75)=${yThreshold.toFixed(3)}`,
     },
     visualizationValues: {
       scatter_points: {
@@ -563,6 +576,8 @@ function executeRiskPotentialScatter({ db, query, filters, page, pageSize }) {
         y_field: yMetricKey,
         y_metric_label: yMetricLabel,
         endpoint: endpoint || 'mean',
+        x_scale: xScaleMode,
+        threshold_basis: thresholdBasis,
       },
     },
     table: {
@@ -580,6 +595,8 @@ function executeRiskPotentialScatter({ db, query, filters, page, pageSize }) {
       y_metric_label: yMetricLabel,
       x_threshold: xThreshold,
       y_threshold: yThreshold,
+      threshold_basis: thresholdBasis,
+      x_scale: xScaleMode,
       focus_cluster: Boolean(filters.focus_cluster),
       gene_p95: geneP95 ?? null,
     },
@@ -683,4 +700,3 @@ export function createGuidedEngine({ db, projectRoot }) {
     executeQuery,
   };
 }
-

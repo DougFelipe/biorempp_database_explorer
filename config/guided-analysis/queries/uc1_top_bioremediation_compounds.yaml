@@ -6,6 +6,35 @@ description: Compounds ranked by KO count using the canonical compound_summary d
 dataset: compound_summary
 executor: uc_ranked_metric
 
+use_case_description:
+  scientific_question: Which BioRemPP compounds show broader functional annotation coverage based on KO associations?
+  description: This view ranks compounds by KO count to support exploratory prioritization of compounds with broader annotated bioremediation-relevant functions.
+  interpretation:
+    - Higher-ranked compounds suggest broader annotated functional coverage in the current integrated dataset.
+    - This ranking is exploratory and should be used for hypothesis generation, not as evidence of confirmed remediation performance.
+    - Differences across compounds may reflect annotation density and data coverage, so downstream validation remains necessary.
+
+methods_modal:
+  button_label: View Methods
+  title: "UC-1: Top Bioremediation Compounds"
+  introduction: This workflow ranks compounds using precomputed BioRemPP summary metrics to support exploratory prioritization.
+  steps:
+    - title: Scope Selection
+      description: The analysis starts from the canonical compound_summary runtime table as the compound universe.
+      bullets:
+        - Scope represents BioRemPP compounds available in the current lean SQLite profile.
+    - title: Filter Application
+      description: User-selected filters (search, class, KO range, gene range, pathway annotations) are applied server-side with typed constraints.
+    - title: Ranking Logic
+      description: Compounds are ordered by ko_count in descending order using the configured ranked metric executor.
+      bullets:
+        - Ties are resolved with deterministic ordering to preserve reproducibility.
+    - title: Result Assembly
+      description: The backend returns summary cards, barplot items, and paginated table rows in a unified guided response contract.
+    - title: Exploratory Interpretation
+      description: Higher positions indicate broader annotated functional coverage, to be interpreted as hypothesis-generating evidence.
+  footer_note: Outputs are exploratory rankings based on annotation coverage and do not confirm remediation efficacy by themselves.
+
 defaults:
   page_size: 10
   sort:
