@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import express from 'express';
 import Database from 'better-sqlite3';
+import { createGuidedEngine } from './guided/engine.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,6 +66,9 @@ const hasCompoundMetadataTable = Boolean(
 
 const app = express();
 app.use(express.json());
+
+const guidedEngine = createGuidedEngine({ db, projectRoot });
+guidedEngine.getCatalogResponse();
 
 function parsePositiveInt(value, fallback) {
   if (value === undefined || value === null || value === '') {
@@ -203,6 +207,57 @@ function createEmptyCompoundMetadata(cpd) {
     },
   };
 }
+
+app.get('/api/guided/catalog', (_req, res, next) => {
+  try {
+    res.json(guidedEngine.getCatalogResponse());
+  } catch (error) {
+    next(error);
+  }
+});
+
+function handleGuidedRouteError(error, res, next) {
+  if (!(error instanceof Error)) {
+    next(error);
+    return;
+  }
+
+  if (error.message.includes('not found')) {
+    res.status(404).json({ error: error.message });
+    return;
+  }
+
+  if (error.message.includes('Unsupported') || error.message.includes('Unknown') || error.message.includes('invalid')) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+
+  next(error);
+}
+
+app.get('/api/guided/queries/:id/options', (req, res, next) => {
+  try {
+    const rawFilters = {};
+    for (const [key, value] of Object.entries(req.query || {})) {
+      if (Array.isArray(value)) {
+        rawFilters[key] = value[0];
+      } else {
+        rawFilters[key] = value;
+      }
+    }
+    res.json(guidedEngine.getQueryOptions(req.params.id, rawFilters));
+  } catch (error) {
+    handleGuidedRouteError(error, res, next);
+  }
+});
+
+app.post('/api/guided/queries/:id/execute', (req, res, next) => {
+  try {
+    res.json(guidedEngine.executeQuery(req.params.id, req.body || {}));
+  } catch (error) {
+    handleGuidedRouteError(error, res, next);
+  }
+});
 
 app.get('/api/compounds', (req, res, next) => {
   try {
