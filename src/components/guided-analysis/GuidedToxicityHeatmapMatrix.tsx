@@ -36,20 +36,31 @@ export function GuidedToxicityHeatmapMatrix({ matrix }: GuidedToxicityHeatmapMat
   }));
   const facets = toToxicityFacets(endpointSeed);
   const endpointOrder = facets.flatMap((facet) => facet.endpoints.map((endpoint) => endpoint.endpoint));
-  const compounds = matrix.compounds || [];
-  const totalInScope = matrix.total_compounds_in_scope ?? compounds.length;
+  const rows =
+    Array.isArray(matrix.rows) && matrix.rows.length > 0
+      ? matrix.rows
+      : (matrix.compounds || []).map((compound) => ({
+          id: compound.cpd,
+          label: compound.compoundname || compound.cpd,
+          secondary_label: compound.cpd,
+        }));
+  const rowLabel = matrix.row_label || 'Compound';
+  const rowLabelPlural = matrix.row_label_plural || `${rowLabel}s`;
+  const totalInScope = matrix.total_rows_in_scope ?? matrix.total_compounds_in_scope ?? rows.length;
 
-  const cellMap = new Map(matrix.cells.map((cell) => [`${cell.cpd}|${cell.endpoint}`, cell] as const));
+  const cellMap = new Map(
+    matrix.cells.map((cell) => [`${cell.row_id || cell.cpd || ''}|${cell.endpoint}`, cell] as const)
+  );
   const minTableWidth = Math.max(760, 280 + endpointOrder.length * 52);
 
-  if (endpointOrder.length === 0 || compounds.length === 0) {
+  if (endpointOrder.length === 0 || rows.length === 0) {
     return <p className="text-sm text-gray-500">No toxicity matrix data available for this guided query.</p>;
   }
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-gray-600">
-        Showing {compounds.length} of {totalInScope} compounds
+        Showing {rows.length} of {totalInScope} {rowLabelPlural.toLowerCase()}
       </p>
 
       <div className="flex items-center gap-2 text-xs text-gray-600">
@@ -69,7 +80,7 @@ export function GuidedToxicityHeatmapMatrix({ matrix }: GuidedToxicityHeatmapMat
           <thead>
             <tr>
               <th className="sticky top-0 left-0 z-30 bg-white px-2 py-1 text-left text-[11px] font-medium text-gray-600 w-60">
-                Compound
+                {rowLabel}
               </th>
               {facets.map((facet) => (
                 <th
@@ -110,25 +121,27 @@ export function GuidedToxicityHeatmapMatrix({ matrix }: GuidedToxicityHeatmapMat
           </thead>
 
           <tbody>
-            {compounds.map((compound) => (
-              <tr key={compound.cpd}>
+            {rows.map((row) => (
+              <tr key={row.id}>
                 <th
                   className="sticky left-0 z-10 bg-white px-2 py-1 text-left text-xs font-medium text-gray-700"
-                  title={`${compound.compoundname || compound.cpd} (${compound.cpd})`}
+                  title={row.secondary_label ? `${row.label} (${row.secondary_label})` : row.label}
                 >
-                  <span className="block truncate max-w-[220px]">{compound.compoundname || compound.cpd}</span>
-                  <span className="block text-[10px] text-gray-400 font-normal">{compound.cpd}</span>
+                  <span className="block truncate max-w-[220px]">{row.label}</span>
+                  {row.secondary_label ? (
+                    <span className="block text-[10px] text-gray-400 font-normal">{row.secondary_label}</span>
+                  ) : null}
                 </th>
 
                 {endpointOrder.map((endpoint) => {
-                  const cell = cellMap.get(`${compound.cpd}|${endpoint}`);
+                  const cell = cellMap.get(`${row.id}|${endpoint}`);
                   const value = cell?.value ?? null;
                   const fullEndpoint = formatEndpoint(endpoint);
-                  const tooltip = `${compound.compoundname || compound.cpd} | ${fullEndpoint}: ${
+                  const tooltip = `${row.label} | ${fullEndpoint}: ${
                     value === null ? '-' : value.toFixed(4)
                   }${cell?.label ? ` (${cell.label})` : ''}`;
                   return (
-                    <td key={`${compound.cpd}|${endpoint}`} className="p-0">
+                    <td key={`${row.id}|${endpoint}`} className="p-0">
                       <div
                         className="h-7 rounded border border-gray-100"
                         style={{ backgroundColor: predictionCellColor(value) }}

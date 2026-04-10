@@ -182,8 +182,16 @@ export interface GuidedHeatmapMatrixCompound {
   endpoint_used?: string | null;
 }
 
+export interface GuidedHeatmapMatrixRow {
+  id: string;
+  label: string;
+  secondary_label?: string | null;
+  meta?: Record<string, unknown>;
+}
+
 export interface GuidedHeatmapMatrixCell {
-  cpd: string;
+  row_id?: string;
+  cpd?: string;
   endpoint: string;
   label: string | null;
   value: number | null;
@@ -191,9 +199,13 @@ export interface GuidedHeatmapMatrixCell {
 }
 
 export interface GuidedHeatmapMatrixVisualizationData {
+  rows?: GuidedHeatmapMatrixRow[];
+  row_label?: string;
+  row_label_plural?: string;
   compounds: GuidedHeatmapMatrixCompound[];
   endpoints: string[];
   cells: GuidedHeatmapMatrixCell[];
+  total_rows_in_scope?: number;
   total_compounds_in_scope?: number;
 }
 
