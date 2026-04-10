@@ -1,0 +1,188 @@
+id: uc6_pathways_toxic_compounds
+category: pathway_analysis
+title: Pathways Associated with Toxic Compounds
+question: Which pathways are linked to compounds with high predicted toxicity?
+description: Pathway-centric ranking by pathway-compound links filtered through endpoint-level toxicity predictions.
+dataset: compound_summary
+executor: uc_pathways_toxic_compounds
+
+use_case_description:
+  scientific_question: Which pathways are associated with compounds above the selected toxicity prediction threshold?
+  description: This use case joins deduplicated pathway-compound mappings with ToxCSM endpoint values and ranks pathways by toxic-compound linkage under the active endpoint context.
+  visual_elements:
+    - title: Pathway Toxicity Ranking
+      description: Horizontal bar plot ranks pathways by number of compounds above the selected toxicity threshold.
+    - title: Pathway Toxicity Heatmap
+      description: Heatmap shows pathways on rows and toxicity endpoints on columns using aggregated endpoint values from toxic compounds.
+    - title: Pathway Summary Table
+      description: Table reports toxic compounds, total compounds, ratio, and maximum prediction per pathway.
+  interpretation:
+    - Higher-ranked pathways indicate stronger exploratory association with compounds above the selected toxicity threshold.
+    - Results are endpoint-context dependent and should be interpreted as exploratory signals, not causal confirmation.
+    - This view supports hypothesis generation and prioritization under transparent threshold assumptions.
+
+methods_modal:
+  button_label: View Methods
+  title: "UC-6: Pathways Associated with Toxic Compounds"
+  introduction: This workflow identifies pathways linked to compounds that exceed selected endpoint-level toxicity thresholds.
+  steps:
+    - title: Scope Construction
+      description: Build deduplicated pathway-compound pairs from compound_ko_pathway_rel with source and pathway filters.
+    - title: Endpoint Context Resolution
+      description: Select risk mode as single endpoint or endpoint-group peak.
+      bullets:
+        - Endpoint mode uses one endpoint value per compound.
+        - Group peak mode uses MAX(value) within selected endpoint group.
+    - title: Threshold Filtering
+      description: Keep compounds that satisfy prediction threshold range.
+    - title: Pathway Aggregation
+      description: Compute per-pathway toxic compound counts, total compound counts, toxic ratio, and max prediction.
+    - title: Visualization Output
+      description: Render pathway ranking barplot, pathway-endpoint heatmap, and paginated table.
+  footer_note: Endpoint-level values are model-derived exploratory predictions and should be interpreted with domain context.
+
+defaults:
+  page_size: 10
+  filters:
+    source: all
+    risk_mode: endpoint
+    endpoint_group: all
+    endpoint: avian
+    y_value:
+      min: 0.5
+
+executor_config:
+  bar_top_n: 10
+  heatmap_top_n: 30
+
+filters:
+  - id: source
+    type: select
+    label: Source
+    provider:
+      type: static
+      options:
+        - value: all
+          label: All sources
+        - value: KEGG
+          label: KEGG
+        - value: HADEG
+          label: HADEG
+        - value: COMPOUND_PATHWAY
+          label: COMPOUND_PATHWAY
+  - id: pathway
+    type: search
+    label: Search Pathway
+    placeholder: Pathway name
+  - id: risk_mode
+    type: select
+    label: Risk Mode
+    provider:
+      type: static
+      options:
+        - value: endpoint
+          label: Single Endpoint
+        - value: group_peak
+          label: Endpoint Group Peak (MAX)
+  - id: endpoint_group
+    type: select
+    label: Endpoint Group
+    provider:
+      type: static
+      options:
+        - value: all
+          label: All groups
+        - value: ecotoxicity
+          label: Ecotoxicity
+        - value: genotoxicity_carcinogenicity
+          label: Genotoxicity & Carcinogenicity
+        - value: nuclear_receptors
+          label: Nuclear Receptors (NR)
+        - value: stress_response
+          label: Stress Response (SR)
+        - value: organ_irritation
+          label: Organ / Irritation
+        - value: other
+          label: Other
+  - id: endpoint
+    type: dependent_select
+    label: Endpoint
+    depends_on: endpoint_group
+    provider:
+      type: query_derived
+      source: toxicity_endpoints
+  - id: y_value
+    type: number_range
+    label: Prediction Threshold
+    min: 0
+    max: 1
+    step: 0.01
+  - id: compound_count
+    type: number_range
+    label: Pathway Compound Count
+    min: 0
+  - id: toxic_compound_count
+    type: number_range
+    label: Toxic Compound Count
+    min: 0
+
+summary_cards:
+  - id: pathways_in_scope
+    label: Pathways in Scope
+    value_key: pathways_in_scope
+  - id: compounds_in_scope
+    label: Compounds in Scope
+    value_key: compounds_in_scope
+  - id: toxic_compounds_in_scope
+    label: Toxic Compounds
+    value_key: toxic_compounds_in_scope
+  - id: risk_mode_label
+    label: Risk Mode
+    value_key: risk_mode_label
+  - id: endpoint_context
+    label: Endpoint Context
+    value_key: endpoint_context
+
+visualizations:
+  - id: uc6_bar
+    type: horizontal_bar
+    title: Pathways Linked to Toxic Compounds
+    subtitle: Ranked by toxic compound count
+    data_key: bar_items
+  - id: uc6_heatmap
+    type: heatmap_matrix
+    title: Pathway Toxicity Heatmap
+    subtitle: Pathways on Y-axis and grouped endpoints on top
+    data_key: toxicity_matrix
+
+table:
+  id: uc6_table
+  title: Pathways associated with toxic compounds
+  subtitle: Ranking by toxic-compound linkage under active context
+  empty_message: No pathways found for selected toxicity filters.
+  columns:
+    - id: rank
+      label: Rank
+      type: number
+    - id: pathway
+      label: Pathway
+      type: text
+    - id: source
+      label: Source
+      type: text
+    - id: toxic_compound_count
+      label: Toxic Compounds
+      type: number
+    - id: compound_count
+      label: Total Compounds
+      type: number
+    - id: toxic_ratio
+      label: Toxic Ratio (%)
+      type: number
+    - id: max_prediction
+      label: Max Prediction
+      type: number
+
+insights:
+  - id: uc6_insight
+    text: Higher-ranked pathways indicate stronger exploratory linkage to compounds above the selected endpoint-level toxicity threshold.

@@ -10,4 +10,5 @@ query_order:
   - uc2_most_toxic_compounds
   - uc4_regulated_by_agency
   - uc5_pathways_functional_coverage
+  - uc6_pathways_toxic_compounds
   - uc3_risk_vs_bioremediation_potential
