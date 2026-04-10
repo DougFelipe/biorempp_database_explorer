@@ -10,10 +10,6 @@ const projectRoot = path.resolve(__dirname, '..');
 
 const PORT = Number(process.env.PORT || (process.env.NODE_ENV === 'production' ? 3000 : 3101));
 const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH || path.join(projectRoot, 'data', 'biorempp.sqlite');
-const ASSETS_VERSION = process.env.ASSETS_VERSION || 'v0.0.2';
-const ASSETS_ROOT_PATH = process.env.ASSETS_ROOT_PATH || path.join(projectRoot, 'data', 'assets');
-const ASSET_VERSION_PATH = path.join(ASSETS_ROOT_PATH, ASSETS_VERSION);
-const ASSET_MANIFEST_PATH = path.join(ASSET_VERSION_PATH, 'manifest.json');
 
 if (!fs.existsSync(SQLITE_DB_PATH)) {
   throw new Error(`SQLite database not found at ${SQLITE_DB_PATH}. Run "npm run ingest:sqlite" first.`);
@@ -159,13 +155,6 @@ function readDistinctStrings(sql, params = []) {
   return rows
     .map((row) => row.value)
     .filter((value) => value !== null && value !== undefined && value !== '');
-}
-
-function readAssetManifest() {
-  if (!fs.existsSync(ASSET_MANIFEST_PATH)) {
-    return null;
-  }
-  return JSON.parse(fs.readFileSync(ASSET_MANIFEST_PATH, 'utf8'));
 }
 
 function createEmptyCompoundMetadata(cpd) {
@@ -1597,50 +1586,9 @@ app.get('/api/meta/toxicity/labels', (req, res, next) => {
   }
 });
 
-app.get('/api/meta/assets', (_req, res, next) => {
-  try {
-    const manifest = readAssetManifest();
-    if (!manifest) {
-      res.json({
-        available: false,
-        version: ASSETS_VERSION,
-        basePath: `/assets/${ASSETS_VERSION}`,
-      });
-      return;
-    }
-
-    res.json({
-      available: true,
-      version: ASSETS_VERSION,
-      basePath: `/assets/${ASSETS_VERSION}`,
-      manifest,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
-
-if (fs.existsSync(ASSETS_ROOT_PATH)) {
-  app.use(
-    '/assets',
-    express.static(ASSETS_ROOT_PATH, {
-      immutable: true,
-      maxAge: '1y',
-      setHeaders: (res, filePath) => {
-        const normalized = filePath.replaceAll('\\', '/');
-        if (normalized.endsWith('/manifest.json')) {
-          res.setHeader('Cache-Control', 'public, max-age=60');
-        } else {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        }
-      },
-    })
-  );
-}
 
 const distPath = path.join(projectRoot, 'dist');
 if (fs.existsSync(distPath)) {
@@ -1661,6 +1609,4 @@ app.use((error, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`BioRemPP monolith listening on http://0.0.0.0:${PORT}`);
   console.log(`SQLite DB: ${SQLITE_DB_PATH}`);
-  console.log(`Assets root: ${ASSETS_ROOT_PATH}`);
-  console.log(`Assets version: ${ASSETS_VERSION}`);
 });
