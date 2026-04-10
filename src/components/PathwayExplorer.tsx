@@ -4,7 +4,11 @@ import { getPathways } from '../services/api';
 import type { PathwaySummary, PathwayFilters } from '../types/database';
 import { Pagination } from './Pagination';
 
-export function PathwayExplorer() {
+interface PathwayExplorerProps {
+  onPathwaySelect?: (pathway: string, source?: string) => void;
+}
+
+export function PathwayExplorer({ onPathwaySelect }: PathwayExplorerProps) {
   const [pathways, setPathways] = useState<PathwaySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -145,7 +149,11 @@ export function PathwayExplorer() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {pathways.map((pathway, idx) => (
-                  <tr key={`${pathway.pathway}-${pathway.source}-${idx}`} className="hover:bg-gray-50">
+                  <tr
+                    key={`${pathway.pathway}-${pathway.source}-${idx}`}
+                    className={`hover:bg-gray-50 ${onPathwaySelect ? 'cursor-pointer' : ''}`}
+                    onClick={() => onPathwaySelect?.(pathway.pathway, pathway.source)}
+                  >
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
                       {pathway.pathway}
                     </td>

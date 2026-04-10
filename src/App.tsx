@@ -4,11 +4,15 @@ import { CompoundExplorer } from './components/CompoundExplorer';
 import { CompoundDetail } from './components/CompoundDetail';
 import { GeneExplorer } from './components/GeneExplorer';
 import { PathwayExplorer } from './components/PathwayExplorer';
+import { PathwayDetail } from './components/PathwayDetail';
 import { ToxicityExplorer } from './components/ToxicityExplorer';
 import { VisualizationsHub } from './components/VisualizationsHub';
 
 type View = 'compounds' | 'genes' | 'pathways' | 'toxicity' | 'visualizations';
-type Route = { kind: 'view'; view: View } | { kind: 'compound'; cpd: string };
+type Route =
+  | { kind: 'view'; view: View }
+  | { kind: 'compound'; cpd: string }
+  | { kind: 'pathway'; pathway: string; source?: string };
 
 const VIEW_PATHS: Record<View, string> = {
   compounds: '/compounds',
@@ -40,6 +44,24 @@ function parseRoute(pathname: string): Route {
   }
   if (path === '/visualizations') {
     return { kind: 'view', view: 'visualizations' };
+  }
+  if (path.startsWith('/pathways/detail/')) {
+    const remainder = path.slice('/pathways/detail/'.length);
+    if (remainder) {
+      const segments = remainder.split('/').filter(Boolean);
+      if (segments.length >= 2) {
+        const source = decodeURIComponent(segments[0]).trim().toUpperCase();
+        const pathway = decodeURIComponent(segments.slice(1).join('/')).trim();
+        if (pathway) {
+          return { kind: 'pathway', pathway, source: source || undefined };
+        }
+      } else {
+        const pathway = decodeURIComponent(segments[0]).trim();
+        if (pathway) {
+          return { kind: 'pathway', pathway };
+        }
+      }
+    }
   }
   if (path.startsWith('/compounds/')) {
     const cpd = decodeURIComponent(path.slice('/compounds/'.length)).trim();
@@ -89,7 +111,18 @@ function App() {
     navigate(`/compounds/${encodeURIComponent(cpd)}`);
   }
 
-  const activeView: View = route.kind === 'compound' ? 'compounds' : route.view;
+  function openPathwayDetail(pathway: string, source?: string) {
+    const encodedPathway = encodeURIComponent(pathway.trim());
+    const normalizedSource = source?.trim().toUpperCase();
+    if (normalizedSource && normalizedSource !== 'ALL') {
+      navigate(`/pathways/detail/${encodeURIComponent(normalizedSource)}/${encodedPathway}`);
+      return;
+    }
+    navigate(`/pathways/detail/${encodedPathway}`);
+  }
+
+  const activeView: View =
+    route.kind === 'compound' ? 'compounds' : route.kind === 'pathway' ? 'pathways' : route.view;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -174,13 +207,22 @@ function App() {
           <CompoundExplorer onCompoundSelect={openCompoundDetail} />
         )}
         {route.kind === 'view' && route.view === 'genes' && <GeneExplorer />}
-        {route.kind === 'view' && route.view === 'pathways' && <PathwayExplorer />}
+        {route.kind === 'view' && route.view === 'pathways' && (
+          <PathwayExplorer onPathwaySelect={openPathwayDetail} />
+        )}
         {route.kind === 'view' && route.view === 'toxicity' && <ToxicityExplorer />}
         {route.kind === 'view' && route.view === 'visualizations' && <VisualizationsHub />}
         {route.kind === 'compound' && (
           <CompoundDetail
             cpd={route.cpd}
             onBack={() => navigateToView('compounds')}
+          />
+        )}
+        {route.kind === 'pathway' && (
+          <PathwayDetail
+            pathway={route.pathway}
+            source={route.source}
+            onBack={() => navigateToView('pathways')}
           />
         )}
       </main>
