@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react';
-import { BarChart3, Database, Dna, GitBranch, FlaskConical, ShieldAlert } from 'lucide-react';
+import { BarChart3, Database, Dna, GitBranch, FlaskConical, Layers3, ShieldAlert } from 'lucide-react';
 import { CompoundExplorer } from './components/CompoundExplorer';
+import { CompoundClassExplorer } from './components/CompoundClassExplorer';
 import { CompoundDetail } from './components/CompoundDetail';
+import { CompoundClassDetail } from './components/CompoundClassDetail';
 import { GeneExplorer } from './components/GeneExplorer';
 import { PathwayExplorer } from './components/PathwayExplorer';
 import { PathwayDetail } from './components/PathwayDetail';
 import { ToxicityExplorer } from './components/ToxicityExplorer';
 import { VisualizationsHub } from './components/VisualizationsHub';
 
-type View = 'compounds' | 'genes' | 'pathways' | 'toxicity' | 'visualizations';
+type View = 'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'visualizations';
 type Route =
   | { kind: 'view'; view: View }
   | { kind: 'compound'; cpd: string }
+  | { kind: 'compoundClass'; compoundclass: string }
   | { kind: 'pathway'; pathway: string; source?: string };
 
 const VIEW_PATHS: Record<View, string> = {
   compounds: '/compounds',
+  'compound-classes': '/compound-classes',
   genes: '/genes',
   pathways: '/pathways',
   toxicity: '/toxicity',
@@ -32,6 +36,9 @@ function parseRoute(pathname: string): Route {
 
   if (path === '/' || path === '/compounds') {
     return { kind: 'view', view: 'compounds' };
+  }
+  if (path === '/compound-classes') {
+    return { kind: 'view', view: 'compound-classes' };
   }
   if (path === '/genes') {
     return { kind: 'view', view: 'genes' };
@@ -61,6 +68,12 @@ function parseRoute(pathname: string): Route {
           return { kind: 'pathway', pathway };
         }
       }
+    }
+  }
+  if (path.startsWith('/compound-classes/detail/')) {
+    const compoundclass = decodeURIComponent(path.slice('/compound-classes/detail/'.length)).trim();
+    if (compoundclass) {
+      return { kind: 'compoundClass', compoundclass };
     }
   }
   if (path.startsWith('/compounds/')) {
@@ -121,8 +134,18 @@ function App() {
     navigate(`/pathways/detail/${encodedPathway}`);
   }
 
+  function openCompoundClassDetail(compoundclass: string) {
+    navigate(`/compound-classes/detail/${encodeURIComponent(compoundclass.trim())}`);
+  }
+
   const activeView: View =
-    route.kind === 'compound' ? 'compounds' : route.kind === 'pathway' ? 'pathways' : route.view;
+    route.kind === 'compound'
+      ? 'compounds'
+      : route.kind === 'compoundClass'
+      ? 'compound-classes'
+      : route.kind === 'pathway'
+      ? 'pathways'
+      : route.view;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -153,6 +176,17 @@ function App() {
             >
               <Database className="w-4 h-4" />
               Compounds
+            </button>
+            <button
+              onClick={() => navigateToView('compound-classes')}
+              className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
+                activeView === 'compound-classes'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Layers3 className="w-4 h-4" />
+              Compound Classes
             </button>
             <button
               onClick={() => navigateToView('genes')}
@@ -206,6 +240,9 @@ function App() {
         {route.kind === 'view' && route.view === 'compounds' && (
           <CompoundExplorer onCompoundSelect={openCompoundDetail} />
         )}
+        {route.kind === 'view' && route.view === 'compound-classes' && (
+          <CompoundClassExplorer onCompoundClassSelect={openCompoundClassDetail} />
+        )}
         {route.kind === 'view' && route.view === 'genes' && <GeneExplorer />}
         {route.kind === 'view' && route.view === 'pathways' && (
           <PathwayExplorer onPathwaySelect={openPathwayDetail} />
@@ -216,6 +253,12 @@ function App() {
           <CompoundDetail
             cpd={route.cpd}
             onBack={() => navigateToView('compounds')}
+          />
+        )}
+        {route.kind === 'compoundClass' && (
+          <CompoundClassDetail
+            compoundclass={route.compoundclass}
+            onBack={() => navigateToView('compound-classes')}
           />
         )}
         {route.kind === 'pathway' && (
