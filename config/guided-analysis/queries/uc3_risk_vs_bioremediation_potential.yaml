@@ -1,0 +1,139 @@
+id: uc3_risk_vs_bioremediation_potential
+category: compound_analysis
+title: Risk vs Bioremediation Potential
+question: Which compounds show high degradation potential and high risk?
+description: Scatter plot using gene_count (potential) vs toxicity (risk), with pathway_count as point size.
+dataset: compound_summary
+executor: uc_risk_potential_scatter
+
+defaults:
+  page_size: 10
+  x_threshold: 200
+  y_threshold: 0.5
+  filters:
+    endpoint_group: all
+    endpoint: mean
+    focus_cluster: false
+
+executor_config:
+  x_field: gene_count
+  y_field_default: toxicity_risk_mean
+  x_threshold: 200
+  y_threshold: 0.5
+  top_right_sort:
+    - field: y_value
+      order: desc
+    - field: gene_count
+      order: desc
+
+filters:
+  - id: endpoint_group
+    type: select
+    label: Endpoint Group
+    provider:
+      type: static
+      options:
+        - value: all
+          label: All groups
+        - value: ecotoxicity
+          label: Ecotoxicity
+        - value: genotoxicity_carcinogenicity
+          label: Genotoxicity & Carcinogenicity
+        - value: nuclear_receptors
+          label: Nuclear Receptors (NR)
+        - value: stress_response
+          label: Stress Response (SR)
+        - value: organ_irritation
+          label: Organ / Irritation
+        - value: other
+          label: Other
+  - id: endpoint
+    type: dependent_select
+    label: Y Axis Endpoint
+    depends_on: endpoint_group
+    provider:
+      type: query_derived
+      source: toxicity_endpoints
+      include_mean_option: true
+      mean_option_label: toxicity_risk_mean (all endpoints mean)
+  - id: compoundclass
+    type: select
+    label: Compound Class
+    provider:
+      type: meta_endpoint
+      endpoint: /api/meta/compound-classes
+  - id: gene_count
+    type: number_range
+    label: Gene Count
+    min: 0
+  - id: y_value
+    type: number_range
+    label: Risk Score (Y)
+    min: 0
+    max: 1
+    step: 0.01
+  - id: pathway_count
+    type: number_range
+    label: Pathway Annotations
+    min: 0
+  - id: focus_cluster
+    type: toggle
+    label: Focus Cluster (Gene p95)
+  - id: search
+    type: search
+    label: Search Compound
+    placeholder: Name or CPD
+
+summary_cards:
+  - id: compounds_in_scope
+    label: Compounds in Scope
+    value_key: compounds_in_scope
+  - id: plotted_points
+    label: Plotted Points
+    value_key: plotted_points
+  - id: excluded_null_y
+    label: Excluded (Null Y)
+    value_key: excluded_null_y
+  - id: top_right_count
+    label: Top-right Quadrant
+    value_key: top_right_count
+
+visualizations:
+  - id: uc3_scatter
+    type: scatter_quadrant
+    title: Risk vs Bioremediation Potential
+    subtitle: x = gene_count, y = selected risk metric
+    data_key: scatter_points
+
+table:
+  id: uc3_table
+  title: Top-right quadrant compounds
+  subtitle: High Risk + High Potential compounds
+  row_click_field: cpd
+  empty_message: No compounds in the top-right quadrant for current filters.
+  columns:
+    - id: rank
+      label: Rank
+      type: number
+    - id: cpd
+      label: Compound ID
+      type: compound_link
+    - id: compoundname
+      label: Name
+      type: text
+    - id: compoundclass
+      label: Class
+      type: text
+    - id: gene_count
+      label: Gene Count
+      type: number
+    - id: y_value
+      label: Y Value
+      type: number
+    - id: pathway_count
+      label: Pathway Annotations
+      type: number
+
+insights:
+  - id: uc3_insight
+    text: Top-right compounds combine high degradation potential with elevated risk, useful for environmental prioritization.

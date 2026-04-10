@@ -1,0 +1,90 @@
+id: uc1_top_bioremediation_compounds
+category: compound_analysis
+title: Top Bioremediation Compounds
+question: Which BioRemPP compounds show the highest functional diversity?
+description: Compounds ranked by KO count using the canonical compound_summary dataset.
+dataset: compound_summary
+executor: uc_ranked_metric
+
+defaults:
+  page_size: 10
+  sort:
+    field: ko_count
+    order: desc
+
+executor_config:
+  metric_field: ko_count
+  sort_field: ko_count
+  sort_order: desc
+
+filters:
+  - id: search
+    type: search
+    label: Search Compound
+    placeholder: Name or CPD
+  - id: compoundclass
+    type: select
+    label: Compound Class
+    provider:
+      type: meta_endpoint
+      endpoint: /api/meta/compound-classes
+  - id: ko_count
+    type: number_range
+    label: KO Count
+    min: 0
+  - id: gene_count
+    type: number_range
+    label: Gene Count
+    min: 0
+  - id: pathway_count
+    type: number_range
+    label: Pathway Annotations
+    min: 0
+
+summary_cards:
+  - id: compounds_in_scope
+    label: Compounds in Scope
+    value_key: compounds_in_scope
+  - id: ranked_metric
+    label: Ranked Metric
+    value_key: ranked_metric_label
+
+visualizations:
+  - id: uc1_bar
+    type: horizontal_bar
+    title: Top Bioremediation Compounds (KO Count)
+    subtitle: Top 10 by ko_count (desc)
+    data_key: bar_items
+
+table:
+  id: uc1_table
+  title: Ranked compounds by KO count
+  subtitle: Top-ranked compounds with strongest functional diversity
+  row_click_field: cpd
+  empty_message: No ranking data available.
+  columns:
+    - id: rank
+      label: Rank
+      type: number
+    - id: cpd
+      label: Compound ID
+      type: compound_link
+    - id: compoundname
+      label: Name
+      type: text
+    - id: compoundclass
+      label: Class
+      type: text
+    - id: ko_count
+      label: KO Count
+      type: number
+    - id: gene_count
+      label: Gene Count
+      type: number
+    - id: pathway_count
+      label: Pathway Annotations
+      type: number
+
+insights:
+  - id: uc1_insight
+    text: Compounds at the top of this ranking concentrate broader KO coverage and higher functional diversity.

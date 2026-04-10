@@ -1,0 +1,8 @@
+version: v1
+title: Guided Analysis
+categories:
+  - id: compound_analysis
+    label: Compound Analysis
+query_order:
+  - uc1_top_bioremediation_compounds
+  - uc3_risk_vs_bioremediation_potential
