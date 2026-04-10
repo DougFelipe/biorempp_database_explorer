@@ -15,7 +15,9 @@ import { GuidedResultTable } from './guided-analysis/GuidedResultTable';
 import { GuidedSummaryCards } from './guided-analysis/GuidedSummaryCards';
 import { UseCaseDescriptionAccordion } from './guided-analysis/UseCaseDescriptionAccordion';
 import { UseCaseMethodsModal } from './guided-analysis/UseCaseMethodsModal';
+import { UseCaseQueryRecipesModal } from './guided-analysis/UseCaseQueryRecipesModal';
 import { VisualizationRendererRegistry } from './guided-analysis/VisualizationRendererRegistry';
+import { getGuidedQueryRecipe } from '../config/guidedQueryRecipes';
 
 interface GuidedAnalysisPageProps {
   onCompoundSelect: (cpd: string) => void;
@@ -128,6 +130,10 @@ export function GuidedAnalysisPage({ onCompoundSelect }: GuidedAnalysisPageProps
   const selectedQuery = useMemo(
     () => catalog?.queries.find((query) => query.id === selectedQueryId) || null,
     [catalog, selectedQueryId]
+  );
+  const selectedRecipe = useMemo(
+    () => (selectedQuery ? getGuidedQueryRecipe(selectedQuery.id) : undefined),
+    [selectedQuery]
   );
 
   useEffect(() => {
@@ -341,7 +347,12 @@ export function GuidedAnalysisPage({ onCompoundSelect }: GuidedAnalysisPageProps
 
           <UseCaseDescriptionAccordion
             content={selectedQuery.use_case_description}
-            headerAction={<UseCaseMethodsModal content={selectedQuery.methods_modal} />}
+            headerAction={
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <UseCaseMethodsModal content={selectedQuery.methods_modal} />
+                {selectedRecipe ? <UseCaseQueryRecipesModal content={selectedRecipe} /> : null}
+              </div>
+            }
           />
 
           <GuidedFiltersBar
