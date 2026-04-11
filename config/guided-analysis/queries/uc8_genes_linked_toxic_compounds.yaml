@@ -1,0 +1,163 @@
+id: uc8_genes_linked_toxic_compounds
+category: gene_ko_analysis
+title: Genes Linked to Toxic Compounds
+question: Which genes are associated with compounds above the selected toxicity threshold?
+description: Gene-centric ranking by toxic compound associations under a selected endpoint context.
+dataset: compound_summary
+executor: uc_gene_toxic_compounds_endpoint
+
+use_case_description:
+  scientific_question: Which genes are linked to compounds with high predicted toxicity under the selected endpoint?
+  description: This use case ranks genes by distinct toxic compound associations using endpoint-level toxicity predictions joined to deduplicated gene-compound mappings.
+  visual_elements:
+    - title: Gene Toxicity Ranking
+      description: Horizontal bar chart shows top genes ranked by number of toxic compounds under the selected threshold.
+    - title: Toxicity Boxplot per Gene
+      description: Boxplot summarizes endpoint toxicity distribution per top-ranked gene under active threshold filters.
+    - title: Gene Toxicity Table
+      description: Table reports toxic compounds, total compounds, ratio, KO coverage, and maximum prediction per gene.
+  interpretation:
+    - Higher-ranked genes indicate stronger exploratory linkage to compounds above the active toxicity threshold.
+    - Results are endpoint-context dependent and should be interpreted as exploratory signals, not causal confirmation.
+    - This view supports hypothesis generation for potentially critical environmental gene-compound relationships.
+
+methods_modal:
+  button_label: View Methods
+  title: "UC-8: Genes Linked to Toxic Compounds"
+  introduction: This workflow identifies genes associated with compounds that exceed endpoint-level toxicity thresholds.
+  steps:
+    - title: Base Mapping Scope
+      description: Build deduplicated gene-compound links from compound_gene_map and enrich with gene name and KO context from compound_gene_card.
+    - title: Endpoint Toxicity Join
+      description: Join compound links to toxicity_endpoint under the selected endpoint and endpoint group context.
+    - title: Threshold Filtering
+      description: Keep toxicity predictions inside the configured threshold range and aggregate toxic compounds per gene.
+    - title: Gene Aggregation
+      description: Compute toxic compound count, total compound count, KO count, toxic ratio, and maximum prediction per gene.
+    - title: Visualization and Table Output
+      description: Render top-gene bar ranking and return paginated table output under the guided response contract.
+  footer_note: Endpoint-level values are model-derived exploratory predictions and should be interpreted with domain context.
+
+defaults:
+  page_size: 10
+  filters:
+    endpoint_group: all
+    endpoint: avian
+    y_value:
+      min: 0.67
+
+executor_config:
+  bar_top_n: 15
+  boxplot_top_n: 12
+
+filters:
+  - id: search
+    type: search
+    label: Search Gene
+    placeholder: Gene symbol or gene name
+  - id: endpoint_group
+    type: select
+    label: Endpoint Group
+    provider:
+      type: static
+      options:
+        - value: all
+          label: All groups
+        - value: ecotoxicity
+          label: Ecotoxicity
+        - value: genotoxicity_carcinogenicity
+          label: Genotoxicity & Carcinogenicity
+        - value: nuclear_receptors
+          label: Nuclear Receptors (NR)
+        - value: stress_response
+          label: Stress Response (SR)
+        - value: organ_irritation
+          label: Organ / Irritation
+        - value: other
+          label: Other
+  - id: endpoint
+    type: dependent_select
+    label: Endpoint
+    depends_on: endpoint_group
+    provider:
+      type: query_derived
+      source: toxicity_endpoints
+  - id: y_value
+    type: number_range
+    label: Prediction Threshold
+    min: 0
+    max: 1
+    step: 0.01
+  - id: compound_count
+    type: number_range
+    label: Gene Compound Count
+    min: 0
+  - id: toxic_compound_count
+    type: number_range
+    label: Toxic Compound Count
+    min: 0
+  - id: ko_count
+    type: number_range
+    label: KO Count
+    min: 0
+
+summary_cards:
+  - id: genes_in_scope
+    label: Genes in Scope
+    value_key: genes_in_scope
+  - id: toxic_compounds_peak
+    label: Max Toxic Compounds
+    value_key: toxic_compounds_peak
+  - id: endpoint_context
+    label: Endpoint Context
+    value_key: endpoint_context
+  - id: threshold_window
+    label: Threshold Window
+    value_key: threshold_window
+
+visualizations:
+  - id: uc8_boxplot
+    type: boxplot
+    title: Toxicity Distribution per Gene
+    subtitle: Boxplot by endpoint values for top-ranked genes
+    data_key: toxicity_boxplot
+  - id: uc8_bar
+    type: horizontal_bar
+    title: Genes Linked to Toxic Compounds
+    subtitle: Ranked by toxic compound count
+    data_key: bar_items
+
+table:
+  id: uc8_table
+  title: Genes associated with toxic compounds
+  subtitle: Ranked by toxic compound linkage under active endpoint context
+  empty_message: No genes found for selected toxicity filters.
+  columns:
+    - id: rank
+      label: Rank
+      type: number
+    - id: genesymbol
+      label: Gene Symbol
+      type: text
+    - id: gene_name
+      label: Gene Name
+      type: text
+    - id: toxic_compound_count
+      label: Toxic Compounds
+      type: number
+    - id: compound_count
+      label: Total Compounds
+      type: number
+    - id: toxic_ratio
+      label: Toxic Ratio (%)
+      type: number
+    - id: ko_count
+      label: KO Count
+      type: number
+    - id: max_prediction
+      label: Max Prediction
+      type: number
+
+insights:
+  - id: uc8_insight
+    text: Higher-ranked genes indicate stronger exploratory linkage to compounds above the selected endpoint-level toxicity threshold.

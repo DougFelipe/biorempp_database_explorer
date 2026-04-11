@@ -15,7 +15,7 @@ const outputPath = path.join(outputDir, 'catalog.json');
 
 const VALID_FILTER_TYPES = new Set(['select', 'number_range', 'search', 'dependent_select', 'toggle']);
 const VALID_PROVIDER_TYPES = new Set(['meta_endpoint', 'static', 'query_derived']);
-const VALID_VIS_TYPES = new Set(['horizontal_bar', 'scatter_quadrant', 'heatmap_matrix', 'table']);
+const VALID_VIS_TYPES = new Set(['horizontal_bar', 'scatter_quadrant', 'heatmap_matrix', 'boxplot', 'table']);
 const VALID_COLUMN_TYPES = new Set(['text', 'number', 'compound_link']);
 const MIN_INTERPRETATION_STATEMENT_LENGTH = 20;
 

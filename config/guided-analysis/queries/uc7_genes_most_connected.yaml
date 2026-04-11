@@ -1,0 +1,104 @@
+id: uc7_genes_most_connected
+category: gene_ko_analysis
+title: Most Connected Genes
+question: Which genes are associated with the largest number of compounds?
+description: Gene-centric ranking by distinct compound associations from deduplicated compound-gene mappings.
+dataset: compound_summary
+executor: uc_gene_connectivity_ranking
+
+use_case_description:
+  scientific_question: Which genes concentrate broader compound-level associations in the current integrated BioRemPP scope?
+  description: This use case ranks genes by the number of distinct compounds associated with each gene symbol, using deduplicated mapping data to avoid row inflation.
+  visual_elements:
+    - title: Gene Ranking Barplot
+      description: Displays top genes ordered by distinct compound count for quick connectivity comparison.
+    - title: Gene Ranking Table
+      description: Lists ranked genes with compound coverage and KO context for detailed exploratory analysis.
+  interpretation:
+    - Higher-ranked genes indicate stronger annotation centrality across compounds in the current dataset scope.
+    - This ranking is exploratory and should be interpreted as connectivity signal, not as confirmed mechanistic dominance.
+    - Gene connectivity patterns can guide hypothesis generation and prioritization for downstream validation.
+
+methods_modal:
+  button_label: View Methods
+  title: "UC-7: Most Connected Genes"
+  introduction: This workflow computes gene-level connectivity by counting distinct compounds linked to each gene symbol.
+  steps:
+    - title: Base Mapping Scope
+      description: Start from compound_gene_map as canonical deduplicated gene-compound links.
+    - title: Gene-Level Aggregation
+      description: Compute COUNT(DISTINCT cpd) per genesymbol as the primary connectivity metric.
+      bullets:
+        - This avoids inflation from repeated tidy/joined rows.
+    - title: KO Context Enrichment
+      description: Add KO context with COUNT(DISTINCT ko) from compound_gene_card for exploratory interpretation.
+    - title: Filter and Ranking
+      description: Apply typed filters (search, compound_count range, ko_count range), then rank by compound_count descending.
+    - title: Visualization and Table Output
+      description: Return top-N barplot and paginated ranking table under the common guided response contract.
+  footer_note: Results are annotation-centric exploratory signals and should not be interpreted as causal proof.
+
+defaults:
+  page_size: 10
+  filters: {}
+
+executor_config:
+  bar_top_n: 10
+
+filters:
+  - id: search
+    type: search
+    label: Search Gene
+    placeholder: Gene symbol or gene name
+  - id: compound_count
+    type: number_range
+    label: Compound Count
+    min: 0
+  - id: ko_count
+    type: number_range
+    label: KO Count
+    min: 0
+
+summary_cards:
+  - id: genes_in_scope
+    label: Genes in Scope
+    value_key: genes_in_scope
+  - id: max_compound_count
+    label: Max Compound Count
+    value_key: max_compound_count
+  - id: ranked_metric
+    label: Ranked Metric
+    value_key: ranked_metric_label
+
+visualizations:
+  - id: uc7_bar
+    type: horizontal_bar
+    title: Most Connected Genes
+    subtitle: Top genes by distinct compound associations
+    data_key: bar_items
+
+table:
+  id: uc7_table
+  title: Ranked genes by compound connectivity
+  subtitle: Ordered by COUNT(DISTINCT cpd)
+  empty_message: No genes found for selected filters.
+  columns:
+    - id: rank
+      label: Rank
+      type: number
+    - id: genesymbol
+      label: Gene Symbol
+      type: text
+    - id: gene_name
+      label: Gene Name
+      type: text
+    - id: compound_count
+      label: Compound Count
+      type: number
+    - id: ko_count
+      label: KO Count
+      type: number
+
+insights:
+  - id: uc7_insight
+    text: Higher-ranked genes indicate broader compound-level connectivity and can support exploratory bioremediation hypothesis prioritization.

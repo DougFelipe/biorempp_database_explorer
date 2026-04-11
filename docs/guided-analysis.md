@@ -18,11 +18,15 @@ Guided Analysis now runs from declarative YAML files compiled into server-side J
 2. Add its `id` to `config/guided-analysis/catalog.yaml` under `query_order`.
 3. Reuse an existing executor by setting `executor` in YAML:
    - `uc_ranked_metric`
+   - `uc_gene_connectivity_ranking`
+   - `uc_gene_toxic_compounds_endpoint`
+   - `uc_pathways_toxic_compounds`
    - `uc_risk_potential_scatter`
 4. If needed, add a new executor in `server/guided/engine.mjs` and register it in `EXECUTOR_REGISTRY`.
 5. Choose visualization types supported by frontend registry:
    - `horizontal_bar`
    - `scatter_quadrant`
+   - `boxplot`
    - `heatmap_matrix` (prepared for future UCs)
 6. Run:
    - `npm run compile:guided`
