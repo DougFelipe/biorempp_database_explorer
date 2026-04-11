@@ -1,8 +1,10 @@
 import { ChartCard } from '../charts/ChartCard';
 import { HorizontalBarChart, type HorizontalBarItem } from '../charts/HorizontalBarChart';
+import { BoxplotChart } from '../charts/BoxplotChart';
 import { RiskPotentialScatterChart } from './RiskPotentialScatterChart';
 import { GuidedToxicityHeatmapMatrix } from './GuidedToxicityHeatmapMatrix';
 import type {
+  GuidedBoxplotVisualizationData,
   GuidedHeatmapMatrixVisualizationData,
   GuidedScatterVisualizationData,
   GuidedVisualizationResult,
@@ -35,6 +37,13 @@ function isHeatmapData(data: unknown): data is GuidedHeatmapMatrixVisualizationD
   }
   const candidate = data as GuidedHeatmapMatrixVisualizationData;
   return Array.isArray(candidate.compounds) && Array.isArray(candidate.endpoints) && Array.isArray(candidate.cells);
+}
+
+function isBoxplotData(data: unknown): data is GuidedBoxplotVisualizationData {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return false;
+  }
+  return Array.isArray((data as GuidedBoxplotVisualizationData).groups);
 }
 
 function renderHorizontalBar(
@@ -104,6 +113,18 @@ export function VisualizationRendererRegistry({
           return (
             <ChartCard key={visualization.id} title={visualization.title} subtitle={visualization.subtitle || undefined}>
               <GuidedToxicityHeatmapMatrix matrix={visualization.data} />
+            </ChartCard>
+          );
+        }
+
+        if (visualization.type === 'boxplot' && isBoxplotData(visualization.data)) {
+          return (
+            <ChartCard key={visualization.id} title={visualization.title} subtitle={visualization.subtitle || undefined}>
+              <BoxplotChart
+                groups={visualization.data.groups}
+                emptyMessage={visualization.data.empty_message || 'No data available.'}
+                yLabel={visualization.data.y_label}
+              />
             </ChartCard>
           );
         }

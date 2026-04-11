@@ -2,7 +2,7 @@ import type { HorizontalBarItem } from '../components/charts/HorizontalBarChart'
 
 export type GuidedFilterType = 'select' | 'number_range' | 'search' | 'dependent_select' | 'toggle';
 export type GuidedProviderType = 'meta_endpoint' | 'static' | 'query_derived';
-export type GuidedVisualizationType = 'horizontal_bar' | 'scatter_quadrant' | 'heatmap_matrix' | 'table';
+export type GuidedVisualizationType = 'horizontal_bar' | 'scatter_quadrant' | 'heatmap_matrix' | 'boxplot' | 'table';
 export type GuidedTableColumnType = 'text' | 'number' | 'compound_link';
 
 export interface GuidedCategory {
@@ -174,6 +174,24 @@ export interface GuidedHorizontalBarVisualizationData {
   empty_message: string;
 }
 
+export interface GuidedBoxplotGroup {
+  id: string;
+  label: string;
+  count: number;
+  min: number;
+  q1: number;
+  median: number;
+  q3: number;
+  max: number;
+  points?: number[];
+}
+
+export interface GuidedBoxplotVisualizationData {
+  groups: GuidedBoxplotGroup[];
+  empty_message: string;
+  y_label?: string;
+}
+
 export interface GuidedHeatmapMatrixCompound {
   cpd: string;
   compoundname: string | null;
@@ -213,6 +231,7 @@ export type GuidedVisualizationData =
   | GuidedHorizontalBarVisualizationData
   | GuidedScatterVisualizationData
   | GuidedHeatmapMatrixVisualizationData
+  | GuidedBoxplotVisualizationData
   | Record<string, unknown>
   | null;
 
