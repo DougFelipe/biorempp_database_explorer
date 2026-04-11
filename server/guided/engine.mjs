@@ -32,6 +32,8 @@ const EXECUTOR_REGISTRY = {
   uc_most_toxic_compounds: executeMostToxicCompounds,
   uc_regulated_by_agency: executeRegulatedByAgency,
   uc_pathway_functional_coverage: executePathwayFunctionalCoverage,
+  uc_gene_connectivity_ranking: executeGeneConnectivityRanking,
+  uc_gene_toxic_compounds_endpoint: executeGeneToxicCompoundsEndpoint,
   uc_pathways_toxic_compounds: executePathwaysToxicCompounds,
   uc_risk_potential_scatter: executeRiskPotentialScatter,
 };
@@ -997,6 +999,446 @@ function executePathwayFunctionalCoverage({ db, query, filters, page, pageSize }
     extraMeta: {
       selected_source: selectedSource,
       metric_basis: 'count(distinct ko) by pathway',
+    },
+  };
+}
+
+function executeGeneConnectivityRanking({ db, query, filters, page, pageSize }) {
+  const groupedSql = `
+    SELECT
+      cgm.genesymbol AS genesymbol,
+      MIN(NULLIF(TRIM(cgc.genename), '')) AS gene_name,
+      COUNT(DISTINCT cgm.cpd) AS compound_count,
+      COUNT(DISTINCT cgc.ko) AS ko_count
+    FROM compound_gene_map cgm
+    LEFT JOIN compound_gene_card cgc
+      ON cgc.cpd = cgm.cpd
+     AND cgc.genesymbol = cgm.genesymbol
+    WHERE cgm.genesymbol IS NOT NULL
+      AND TRIM(cgm.genesymbol) <> ''
+    GROUP BY cgm.genesymbol
+  `;
+
+  const where = [];
+  const params = [];
+
+  if (filters.search) {
+    const search = safeLikeValue(filters.search);
+    where.push('(genesymbol LIKE ? COLLATE NOCASE OR gene_name LIKE ? COLLATE NOCASE)');
+    params.push(search, search);
+  }
+
+  const compoundRange = filters.compound_count || {};
+  if (compoundRange.min !== undefined) {
+    where.push('compound_count >= ?');
+    params.push(compoundRange.min);
+  }
+  if (compoundRange.max !== undefined) {
+    where.push('compound_count <= ?');
+    params.push(compoundRange.max);
+  }
+
+  const koRange = filters.ko_count || {};
+  if (koRange.min !== undefined) {
+    where.push('ko_count >= ?');
+    params.push(koRange.min);
+  }
+  if (koRange.max !== undefined) {
+    where.push('ko_count <= ?');
+    params.push(koRange.max);
+  }
+
+  const scopedSql = `
+    SELECT
+      genesymbol,
+      gene_name,
+      compound_count,
+      ko_count
+    FROM (${groupedSql}) scope
+    ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+  `;
+
+  const total = db
+    .prepare(
+      `
+      SELECT COUNT(*) AS total
+      FROM (${scopedSql}) ranked
+      `
+    )
+    .get(...params).total;
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const offset = (safePage - 1) * pageSize;
+
+  const rowsRaw = db
+    .prepare(
+      `
+      SELECT
+        genesymbol,
+        gene_name,
+        compound_count,
+        ko_count
+      FROM (${scopedSql}) ranked
+      ORDER BY compound_count DESC, genesymbol ASC
+      LIMIT ? OFFSET ?
+      `
+    )
+    .all(...params, pageSize, offset);
+
+  const rows = rowsRaw.map((row, idx) => ({
+    rank: offset + idx + 1,
+    genesymbol: row.genesymbol,
+    gene_name: row.gene_name,
+    compound_count: Number(row.compound_count) || 0,
+    ko_count: Number(row.ko_count) || 0,
+  }));
+
+  const topN = Math.min(100, parsePositiveInt(query.executor_config?.bar_top_n, 10));
+  const barItems = db
+    .prepare(
+      `
+      SELECT
+        genesymbol,
+        compound_count
+      FROM (${scopedSql}) ranked
+      ORDER BY compound_count DESC, genesymbol ASC
+      LIMIT ?
+      `
+    )
+    .all(...params, topN)
+    .map((row) => ({
+      id: row.genesymbol,
+      label: row.genesymbol,
+      value: Number(row.compound_count) || 0,
+      tooltip: `${row.genesymbol}: ${Number(row.compound_count) || 0} compounds`,
+      color: '#2563eb',
+    }));
+
+  const maxCompoundCount = barItems.length > 0 ? Math.max(...barItems.map((item) => item.value)) : 0;
+
+  return {
+    summaryValues: {
+      genes_in_scope: total,
+      max_compound_count: maxCompoundCount,
+      ranked_metric_label: 'compound_count',
+    },
+    visualizationValues: {
+      bar_items: {
+        items: barItems,
+        empty_message: 'No genes available for current filters.',
+      },
+    },
+    table: {
+      rows,
+      total,
+      page: safePage,
+      pageSize,
+      totalPages,
+    },
+    extraMeta: {
+      metric_basis: 'count(distinct cpd) by genesymbol',
+    },
+  };
+}
+
+function executeGeneToxicCompoundsEndpoint({ db, query, filters, page, pageSize }) {
+  const endpointGroup =
+    typeof filters.endpoint_group === 'string' && filters.endpoint_group.trim() !== ''
+      ? filters.endpoint_group.trim()
+      : 'all';
+
+  const allEndpoints = readDistinctStrings(
+    db,
+    `
+      SELECT DISTINCT endpoint AS value
+      FROM toxicity_endpoint
+      WHERE endpoint IS NOT NULL
+      ORDER BY endpoint
+    `
+  );
+  const groupEndpoints =
+    endpointGroup === 'all'
+      ? allEndpoints
+      : allEndpoints.filter((candidate) => getEndpointGroupKey(candidate) === endpointGroup);
+
+  if (groupEndpoints.length === 0) {
+    throw new Error(`No toxicity endpoints found for endpoint_group "${endpointGroup}"`);
+  }
+
+  let endpoint = typeof filters.endpoint === 'string' ? filters.endpoint.trim() : '';
+  if (!endpoint) {
+    endpoint = groupEndpoints[0];
+  }
+  if (!endpoint) {
+    throw new Error('UC8 requires a valid endpoint selection');
+  }
+  if (endpointGroup !== 'all' && getEndpointGroupKey(endpoint) !== endpointGroup) {
+    throw new Error(`Endpoint "${endpoint}" is not part of endpoint_group "${endpointGroup}"`);
+  }
+
+  const where = ['cgm.genesymbol IS NOT NULL', "TRIM(cgm.genesymbol) <> ''"];
+  const whereParams = [];
+
+  if (filters.search) {
+    const search = safeLikeValue(filters.search);
+    where.push('(cgm.genesymbol LIKE ? COLLATE NOCASE OR cgc.genename LIKE ? COLLATE NOCASE)');
+    whereParams.push(search, search);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+  const baseRows = db
+    .prepare(
+      `
+      SELECT
+        cgm.genesymbol AS genesymbol,
+        MIN(NULLIF(TRIM(cgc.genename), '')) AS gene_name,
+        COUNT(DISTINCT cgm.cpd) AS compound_count,
+        COUNT(DISTINCT cgc.ko) AS ko_count
+      FROM compound_gene_map cgm
+      LEFT JOIN compound_gene_card cgc
+        ON cgc.cpd = cgm.cpd
+       AND cgc.genesymbol = cgm.genesymbol
+      ${whereSql}
+      GROUP BY cgm.genesymbol
+      `
+    )
+    .all(...whereParams);
+
+  const yRange = filters.y_value || {};
+  const toxicityWhere = ['te.value IS NOT NULL'];
+  const toxicityParams = [];
+  if (yRange.min !== undefined) {
+    toxicityWhere.push('te.value >= ?');
+    toxicityParams.push(yRange.min);
+  }
+  if (yRange.max !== undefined) {
+    toxicityWhere.push('te.value <= ?');
+    toxicityParams.push(yRange.max);
+  }
+
+  const toxicRows = db
+    .prepare(
+      `
+      SELECT
+        cgm.genesymbol AS genesymbol,
+        COUNT(DISTINCT cgm.cpd) AS toxic_compound_count,
+        MAX(te.value) AS max_prediction
+      FROM compound_gene_map cgm
+      LEFT JOIN compound_gene_card cgc
+        ON cgc.cpd = cgm.cpd
+       AND cgc.genesymbol = cgm.genesymbol
+      LEFT JOIN toxicity_endpoint te
+        ON te.cpd = cgm.cpd
+       AND te.endpoint = ?
+      ${whereSql}
+        AND ${toxicityWhere.join(' AND ')}
+      GROUP BY cgm.genesymbol
+      `
+    )
+    .all(endpoint, ...whereParams, ...toxicityParams);
+
+  const toxicByGene = new Map(
+    toxicRows.map((row) => [
+      row.genesymbol,
+      {
+        toxic_compound_count: Number(row.toxic_compound_count) || 0,
+        max_prediction:
+          row.max_prediction === null || row.max_prediction === undefined
+            ? null
+            : Number(Number(row.max_prediction).toFixed(4)),
+      },
+    ])
+  );
+
+  const compoundRange = filters.compound_count || {};
+  const toxicCompoundRange = filters.toxic_compound_count || {};
+  const koRange = filters.ko_count || {};
+
+  const rankedRows = baseRows
+    .map((row) => {
+      const compoundCount = Number(row.compound_count) || 0;
+      const koCount = Number(row.ko_count) || 0;
+      const toxicInfo = toxicByGene.get(row.genesymbol) || { toxic_compound_count: 0, max_prediction: null };
+      const toxicCompoundCount = toxicInfo.toxic_compound_count;
+      const toxicRatio =
+        compoundCount > 0 ? Number(((toxicCompoundCount / compoundCount) * 100).toFixed(2)) : 0;
+
+      return {
+        genesymbol: row.genesymbol,
+        gene_name: row.gene_name,
+        compound_count: compoundCount,
+        toxic_compound_count: toxicCompoundCount,
+        toxic_ratio: toxicRatio,
+        ko_count: koCount,
+        max_prediction: toxicInfo.max_prediction,
+      };
+    })
+    .filter((row) => row.toxic_compound_count > 0)
+    .filter((row) => {
+      if (compoundRange.min !== undefined && row.compound_count < compoundRange.min) {
+        return false;
+      }
+      if (compoundRange.max !== undefined && row.compound_count > compoundRange.max) {
+        return false;
+      }
+      if (toxicCompoundRange.min !== undefined && row.toxic_compound_count < toxicCompoundRange.min) {
+        return false;
+      }
+      if (toxicCompoundRange.max !== undefined && row.toxic_compound_count > toxicCompoundRange.max) {
+        return false;
+      }
+      if (koRange.min !== undefined && row.ko_count < koRange.min) {
+        return false;
+      }
+      if (koRange.max !== undefined && row.ko_count > koRange.max) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const toxicDelta = b.toxic_compound_count - a.toxic_compound_count;
+      if (toxicDelta !== 0) {
+        return toxicDelta;
+      }
+      const maxDelta = (b.max_prediction || 0) - (a.max_prediction || 0);
+      if (maxDelta !== 0) {
+        return maxDelta;
+      }
+      return a.genesymbol.localeCompare(b.genesymbol);
+    });
+
+  const total = rankedRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const offset = (safePage - 1) * pageSize;
+  const tableRows = rankedRows.slice(offset, offset + pageSize).map((row, idx) => ({
+    rank: offset + idx + 1,
+    ...row,
+  }));
+
+  const barTopN = Math.min(200, parsePositiveInt(query.executor_config?.bar_top_n, 15));
+  const barItems = rankedRows.slice(0, barTopN).map((row) => ({
+    id: row.genesymbol,
+    label: row.genesymbol,
+    value: row.toxic_compound_count,
+    tooltip: `${row.genesymbol}: ${row.toxic_compound_count} toxic compounds`,
+    color: '#2563eb',
+  }));
+
+  const boxplotTopN = Math.min(100, parsePositiveInt(query.executor_config?.boxplot_top_n, 12));
+  const boxplotGenes = rankedRows.slice(0, boxplotTopN).map((row) => row.genesymbol);
+  const toxicityByGene = new Map(boxplotGenes.map((genesymbol) => [genesymbol, []]));
+
+  if (boxplotGenes.length > 0) {
+    const genePlaceholders = boxplotGenes.map(() => '?').join(', ');
+    const distributionRows = db
+      .prepare(
+        `
+        SELECT
+          cgm.genesymbol AS genesymbol,
+          cgm.cpd AS cpd,
+          te.value AS toxicity_value
+        FROM compound_gene_map cgm
+        LEFT JOIN compound_gene_card cgc
+          ON cgc.cpd = cgm.cpd
+         AND cgc.genesymbol = cgm.genesymbol
+        LEFT JOIN toxicity_endpoint te
+          ON te.cpd = cgm.cpd
+         AND te.endpoint = ?
+        ${whereSql}
+          AND ${toxicityWhere.join(' AND ')}
+          AND cgm.genesymbol IN (${genePlaceholders})
+        GROUP BY cgm.genesymbol, cgm.cpd
+        ORDER BY cgm.genesymbol ASC, te.value ASC
+        `
+      )
+      .all(endpoint, ...whereParams, ...toxicityParams, ...boxplotGenes);
+
+    for (const row of distributionRows) {
+      const value = Number(row.toxicity_value);
+      if (!Number.isFinite(value)) {
+        continue;
+      }
+      const values = toxicityByGene.get(row.genesymbol);
+      if (!values) {
+        continue;
+      }
+      values.push(value);
+    }
+  }
+
+  const boxplotGroups = boxplotGenes
+    .map((genesymbol) => {
+      const values = (toxicityByGene.get(genesymbol) || []).sort((a, b) => a - b);
+      if (values.length === 0) {
+        return null;
+      }
+      const pointSampleLimit = 120;
+      const samplingStep = Math.max(1, Math.ceil(values.length / pointSampleLimit));
+      const sampledPoints = values
+        .filter((_, idx) => idx % samplingStep === 0)
+        .slice(0, pointSampleLimit)
+        .map((value) => Number(value.toFixed(4)));
+      return {
+        id: genesymbol,
+        label: genesymbol,
+        count: values.length,
+        min: Number(values[0].toFixed(4)),
+        q1: Number((percentile(values, 0.25) ?? values[0]).toFixed(4)),
+        median: Number((percentile(values, 0.5) ?? values[0]).toFixed(4)),
+        q3: Number((percentile(values, 0.75) ?? values[values.length - 1]).toFixed(4)),
+        max: Number(values[values.length - 1].toFixed(4)),
+        points: sampledPoints,
+      };
+    })
+    .filter((group) => group !== null);
+
+  const endpointContext =
+    endpointGroup === 'all'
+      ? `Endpoint: ${formatEndpoint(endpoint)}`
+      : `Endpoint: ${formatEndpoint(endpoint)} (${getEndpointGroupTitle(endpointGroup)})`;
+  const thresholdWindow =
+    yRange.min !== undefined && yRange.max !== undefined
+      ? `${yRange.min} to ${yRange.max}`
+      : yRange.min !== undefined
+        ? `>= ${yRange.min}`
+        : yRange.max !== undefined
+          ? `<= ${yRange.max}`
+          : 'Any non-null value';
+
+  return {
+    summaryValues: {
+      genes_in_scope: total,
+      toxic_compounds_peak: rankedRows.length > 0 ? rankedRows[0].toxic_compound_count : 0,
+      endpoint_context: endpointContext,
+      threshold_window: thresholdWindow,
+    },
+    visualizationValues: {
+      toxicity_boxplot: {
+        groups: boxplotGroups,
+        y_label: `Endpoint toxicity score (${formatEndpoint(endpoint)})`,
+        empty_message: 'No boxplot data available for selected toxicity filters.',
+      },
+      bar_items: {
+        items: barItems,
+        empty_message: 'No genes available for selected toxicity filters.',
+      },
+    },
+    table: {
+      rows: tableRows,
+      total,
+      page: safePage,
+      pageSize,
+      totalPages,
+    },
+    extraMeta: {
+      endpoint_group: endpointGroup,
+      endpoint,
+      threshold_min: yRange.min ?? null,
+      threshold_max: yRange.max ?? null,
+      metric_basis: 'count(distinct cpd) by genesymbol with endpoint threshold',
     },
   };
 }
