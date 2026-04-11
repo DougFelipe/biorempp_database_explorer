@@ -17,12 +17,12 @@ export function BoxplotChart({
 		return <p className="text-sm text-gray-500">{emptyMessage}</p>;
 	}
 
-	const chartHeight = 220;
+	const chartHeight = 340;
 	const axisLeft = 46;
 	const axisTop = 12;
-	const axisBottom = 36;
+	const axisBottom = 62;
 	const axisHeight = chartHeight - axisTop - axisBottom;
-	const axisWidth = Math.max(320, groups.length * 62);
+	const axisWidth = Math.max(760, groups.length * 92);
 	const svgWidth = axisLeft + axisWidth + 10;
 	const svgHeight = chartHeight;
 
@@ -79,7 +79,7 @@ export function BoxplotChart({
 					{groups.map((group, idx) => {
 						const spacing = axisWidth / Math.max(1, groups.length);
 						const centerX = axisLeft + spacing * idx + spacing / 2;
-						const boxWidth = Math.min(24, spacing * 0.42);
+						const boxWidth = Math.min(28, spacing * 0.42);
 						const color = palette[idx % palette.length];
 						const pointValues = Array.isArray(group.points) ? group.points : [];
 						const pointJitter = Math.max(3, boxWidth * 0.42);
@@ -124,33 +124,35 @@ export function BoxplotChart({
 								/>
 
 								{pointValues.map((point, pointIdx) => {
-									const yPoint = toY(point);
+									const yPoint = toY(point.toxicity_value);
 									const phase = (pointIdx + 1) * 12.9898 + (idx + 1) * 78.233;
 									const jitter = Math.sin(phase) * pointJitter;
+									const compoundLabel = point.compoundname && point.compoundname.trim() !== '' ? `${point.cpd} (${point.compoundname})` : point.cpd;
+									const endpointLabel = point.endpoint || 'selected endpoint';
 									return (
 										<circle
 											key={`${group.id}-pt-${pointIdx}`}
 											cx={centerX + jitter}
 											cy={yPoint}
-											r={1.8}
+											r={2.2}
 											fill={color}
 											fillOpacity="0.6"
 											stroke="#4b5563"
 											strokeWidth="0.35"
 										>
-											<title>{`${group.label}: ${valueFormatter(point)}`}</title>
+											<title>{`${group.label} | ${compoundLabel} | ${endpointLabel}: ${valueFormatter(point.toxicity_value)}`}</title>
 										</circle>
 									);
 								})}
 
 								<text
 									x={centerX}
-									y={axisTop + axisHeight + 14}
+									y={axisTop + axisHeight + 20}
 									textAnchor="middle"
-									fontSize="10"
+									fontSize="11"
 									fill="#4b5563"
 								>
-									{group.label.length > 9 ? `${group.label.slice(0, 9)}...` : group.label}
+									{group.label.length > 12 ? `${group.label.slice(0, 12)}...` : group.label}
 								</text>
 							</g>
 						);

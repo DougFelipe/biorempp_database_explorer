@@ -1218,39 +1218,71 @@ function executeGeneToxicCompoundsEndpoint({ db, query, filters, page, pageSize 
     toxicityParams.push(yRange.max);
   }
 
-  const toxicRows = db
+  const distributionRows = db
     .prepare(
       `
       SELECT
         cgm.genesymbol AS genesymbol,
-        COUNT(DISTINCT cgm.cpd) AS toxic_compound_count,
-        MAX(te.value) AS max_prediction
+        cgm.cpd AS cpd,
+        MIN(NULLIF(TRIM(cs.compoundname), '')) AS compoundname,
+        te.value AS toxicity_value
       FROM compound_gene_map cgm
       LEFT JOIN compound_gene_card cgc
         ON cgc.cpd = cgm.cpd
        AND cgc.genesymbol = cgm.genesymbol
+      LEFT JOIN compound_summary cs
+        ON cs.cpd = cgm.cpd
       LEFT JOIN toxicity_endpoint te
         ON te.cpd = cgm.cpd
        AND te.endpoint = ?
       ${whereSql}
         AND ${toxicityWhere.join(' AND ')}
-      GROUP BY cgm.genesymbol
+      GROUP BY cgm.genesymbol, cgm.cpd
+      ORDER BY cgm.genesymbol ASC, te.value ASC
       `
     )
     .all(endpoint, ...whereParams, ...toxicityParams);
 
-  const toxicByGene = new Map(
-    toxicRows.map((row) => [
-      row.genesymbol,
-      {
-        toxic_compound_count: Number(row.toxic_compound_count) || 0,
-        max_prediction:
-          row.max_prediction === null || row.max_prediction === undefined
-            ? null
-            : Number(Number(row.max_prediction).toFixed(4)),
-      },
-    ])
-  );
+  const toxicityEntriesByGene = new Map();
+  for (const row of distributionRows) {
+    const value = Number(row.toxicity_value);
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    const genesymbol = String(row.genesymbol || '').trim();
+    const cpd = String(row.cpd || '').trim();
+    if (!genesymbol || !cpd) {
+      continue;
+    }
+    let entries = toxicityEntriesByGene.get(genesymbol);
+    if (!entries) {
+      entries = [];
+      toxicityEntriesByGene.set(genesymbol, entries);
+    }
+    entries.push({
+      cpd,
+      compoundname: row.compoundname || null,
+      toxicity_value: value,
+      endpoint,
+    });
+  }
+
+  const toxicByGene = new Map();
+  for (const [genesymbol, entries] of toxicityEntriesByGene.entries()) {
+    const values = entries.map((entry) => entry.toxicity_value).sort((a, b) => a - b);
+    const min = values[0];
+    const median = percentile(values, 0.5) ?? min;
+    const p90 = percentile(values, 0.9) ?? values[values.length - 1];
+    const max = values[values.length - 1];
+
+    toxicByGene.set(genesymbol, {
+      toxic_compound_count: entries.length,
+      min_prediction: Number(min.toFixed(4)),
+      median_toxicity: Number(median.toFixed(4)),
+      p90_toxicity: Number(p90.toFixed(4)),
+      max_prediction: Number(max.toFixed(4)),
+    });
+  }
 
   const compoundRange = filters.compound_count || {};
   const toxicCompoundRange = filters.toxic_compound_count || {};
@@ -1262,16 +1294,15 @@ function executeGeneToxicCompoundsEndpoint({ db, query, filters, page, pageSize 
       const koCount = Number(row.ko_count) || 0;
       const toxicInfo = toxicByGene.get(row.genesymbol) || { toxic_compound_count: 0, max_prediction: null };
       const toxicCompoundCount = toxicInfo.toxic_compound_count;
-      const toxicRatio =
-        compoundCount > 0 ? Number(((toxicCompoundCount / compoundCount) * 100).toFixed(2)) : 0;
 
       return {
         genesymbol: row.genesymbol,
         gene_name: row.gene_name,
         compound_count: compoundCount,
         toxic_compound_count: toxicCompoundCount,
-        toxic_ratio: toxicRatio,
         ko_count: koCount,
+        median_toxicity: toxicInfo.median_toxicity ?? null,
+        p90_toxicity: toxicInfo.p90_toxicity ?? null,
         max_prediction: toxicInfo.max_prediction,
       };
     })
@@ -1329,67 +1360,41 @@ function executeGeneToxicCompoundsEndpoint({ db, query, filters, page, pageSize 
 
   const boxplotTopN = Math.min(100, parsePositiveInt(query.executor_config?.boxplot_top_n, 12));
   const boxplotGenes = rankedRows.slice(0, boxplotTopN).map((row) => row.genesymbol);
-  const toxicityByGene = new Map(boxplotGenes.map((genesymbol) => [genesymbol, []]));
-
-  if (boxplotGenes.length > 0) {
-    const genePlaceholders = boxplotGenes.map(() => '?').join(', ');
-    const distributionRows = db
-      .prepare(
-        `
-        SELECT
-          cgm.genesymbol AS genesymbol,
-          cgm.cpd AS cpd,
-          te.value AS toxicity_value
-        FROM compound_gene_map cgm
-        LEFT JOIN compound_gene_card cgc
-          ON cgc.cpd = cgm.cpd
-         AND cgc.genesymbol = cgm.genesymbol
-        LEFT JOIN toxicity_endpoint te
-          ON te.cpd = cgm.cpd
-         AND te.endpoint = ?
-        ${whereSql}
-          AND ${toxicityWhere.join(' AND ')}
-          AND cgm.genesymbol IN (${genePlaceholders})
-        GROUP BY cgm.genesymbol, cgm.cpd
-        ORDER BY cgm.genesymbol ASC, te.value ASC
-        `
-      )
-      .all(endpoint, ...whereParams, ...toxicityParams, ...boxplotGenes);
-
-    for (const row of distributionRows) {
-      const value = Number(row.toxicity_value);
-      if (!Number.isFinite(value)) {
-        continue;
-      }
-      const values = toxicityByGene.get(row.genesymbol);
-      if (!values) {
-        continue;
-      }
-      values.push(value);
-    }
-  }
 
   const boxplotGroups = boxplotGenes
     .map((genesymbol) => {
-      const values = (toxicityByGene.get(genesymbol) || []).sort((a, b) => a - b);
-      if (values.length === 0) {
+      const entries = (toxicityEntriesByGene.get(genesymbol) || []).sort(
+        (a, b) => a.toxicity_value - b.toxicity_value
+      );
+      if (entries.length === 0) {
         return null;
       }
+      const stats = toxicByGene.get(genesymbol);
+      if (!stats) {
+        return null;
+      }
+
       const pointSampleLimit = 120;
-      const samplingStep = Math.max(1, Math.ceil(values.length / pointSampleLimit));
-      const sampledPoints = values
+      const samplingStep = Math.max(1, Math.ceil(entries.length / pointSampleLimit));
+      const sampledPoints = entries
         .filter((_, idx) => idx % samplingStep === 0)
         .slice(0, pointSampleLimit)
-        .map((value) => Number(value.toFixed(4)));
+        .map((entry) => ({
+          cpd: entry.cpd,
+          compoundname: entry.compoundname || null,
+          endpoint: entry.endpoint,
+          toxicity_value: Number(entry.toxicity_value.toFixed(4)),
+        }));
+
       return {
         id: genesymbol,
         label: genesymbol,
-        count: values.length,
-        min: Number(values[0].toFixed(4)),
-        q1: Number((percentile(values, 0.25) ?? values[0]).toFixed(4)),
-        median: Number((percentile(values, 0.5) ?? values[0]).toFixed(4)),
-        q3: Number((percentile(values, 0.75) ?? values[values.length - 1]).toFixed(4)),
-        max: Number(values[values.length - 1].toFixed(4)),
+        count: entries.length,
+        min: stats.min_prediction,
+        q1: Number((percentile(entries.map((entry) => entry.toxicity_value), 0.25) ?? stats.min_prediction).toFixed(4)),
+        median: stats.median_toxicity,
+        q3: Number((percentile(entries.map((entry) => entry.toxicity_value), 0.75) ?? stats.max_prediction).toFixed(4)),
+        max: stats.max_prediction,
         points: sampledPoints,
       };
     })

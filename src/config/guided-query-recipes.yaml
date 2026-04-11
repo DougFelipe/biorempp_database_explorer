@@ -531,14 +531,14 @@ queries:
     title: UC-8 Query Recipes (Genes Linked to Toxic Compounds)
     introduction: Reproduce gene-level toxic compound linkage by joining gene-compound mappings with endpoint-level toxicity values.
     sqlite:
-      description: Gene ranking by toxic compound count under selected endpoint and threshold window.
+      description: Gene ranking by toxic compound count under selected endpoint and threshold window, with median and p90 toxicity statistics.
       query: |
         WITH params AS (
           -- endpoint: selected endpoint (example: avian)
           -- threshold_min / threshold_max: toxicity value window
           SELECT
             'avian' AS endpoint,
-            0.67 AS threshold_min,
+            0.00 AS threshold_min,
             NULL AS threshold_max
         ),
         gene_scope AS (
@@ -555,11 +555,11 @@ queries:
             AND TRIM(cgm.genesymbol) <> ''
           GROUP BY cgm.genesymbol
         ),
-        toxic_scope AS (
+        toxic_distribution AS (
           SELECT
             cgm.genesymbol,
-            COUNT(DISTINCT cgm.cpd) AS toxic_compound_count,
-            MAX(te.value) AS max_prediction
+            cgm.cpd,
+            te.value AS toxicity_value
           FROM compound_gene_map cgm
           LEFT JOIN toxicity_endpoint te
             ON te.cpd = cgm.cpd
@@ -570,37 +570,74 @@ queries:
             AND te.value IS NOT NULL
             AND (p.threshold_min IS NULL OR te.value >= p.threshold_min)
             AND (p.threshold_max IS NULL OR te.value <= p.threshold_max)
-          GROUP BY cgm.genesymbol
+          GROUP BY cgm.genesymbol, cgm.cpd
+        ),
+        ranked AS (
+          SELECT
+            genesymbol,
+            toxicity_value,
+            ROW_NUMBER() OVER (
+              PARTITION BY genesymbol
+              ORDER BY toxicity_value
+            ) AS rn,
+            COUNT(*) OVER (
+              PARTITION BY genesymbol
+            ) AS n
+          FROM toxic_distribution
+        ),
+        quantiles AS (
+          SELECT
+            genesymbol,
+            COUNT(*) AS toxic_compound_count,
+            MAX(
+              CASE
+                WHEN rn = CAST((n - 1) * 0.50 AS INT) + 1
+                THEN toxicity_value
+              END
+            ) AS median_toxicity,
+            MAX(
+              CASE
+                WHEN rn = CAST((n - 1) * 0.90 AS INT) + 1
+                THEN toxicity_value
+              END
+            ) AS p90_toxicity,
+            MAX(toxicity_value) AS max_prediction
+          FROM ranked
+          GROUP BY genesymbol
         )
         SELECT
           gs.genesymbol,
           gs.gene_name,
           gs.compound_count,
-          COALESCE(ts.toxic_compound_count, 0) AS toxic_compound_count,
-          CASE
-            WHEN gs.compound_count = 0 THEN 0
-            ELSE ROUND(COALESCE(ts.toxic_compound_count, 0) * 100.0 / gs.compound_count, 2)
-          END AS toxic_ratio,
+          q.toxic_compound_count,
           gs.ko_count,
-          ts.max_prediction
+          ROUND(q.median_toxicity, 4) AS median_toxicity,
+          ROUND(q.p90_toxicity, 4) AS p90_toxicity,
+          ROUND(q.max_prediction, 4) AS max_prediction
         FROM gene_scope gs
-        LEFT JOIN toxic_scope ts
-          ON ts.genesymbol = gs.genesymbol
-        WHERE COALESCE(ts.toxic_compound_count, 0) > 0
-        ORDER BY toxic_compound_count DESC, max_prediction DESC, gs.genesymbol ASC
+        JOIN quantiles q
+          ON q.genesymbol = gs.genesymbol
+        WHERE q.toxic_compound_count > 0
+        ORDER BY q.toxic_compound_count DESC, q.max_prediction DESC, gs.genesymbol ASC
         LIMIT 10;
     python:
-      description: Python sqlite3 script to run UC-8 ranking with endpoint-level threshold filtering.
+      description: Python sqlite3 script to run UC-8 ranking with endpoint-level threshold filtering and quantile metrics.
       script: |
         import sqlite3
 
         db_path = "data/biorempp.sqlite"
         endpoint = "avian"
-        threshold_min = 0.67
+        threshold_min = 0.0
         threshold_max = None
 
         query = """
-        WITH gene_scope AS (
+        WITH params AS (
+          SELECT
+            ? AS endpoint,
+            ? AS threshold_min,
+            ? AS threshold_max
+        ),
+        gene_scope AS (
           SELECT
             cgm.genesymbol,
             MIN(NULLIF(TRIM(cgc.genename), '')) AS gene_name,
@@ -614,45 +651,77 @@ queries:
             AND TRIM(cgm.genesymbol) <> ''
           GROUP BY cgm.genesymbol
         ),
-        toxic_scope AS (
+        toxic_distribution AS (
           SELECT
             cgm.genesymbol,
-            COUNT(DISTINCT cgm.cpd) AS toxic_compound_count,
-            MAX(te.value) AS max_prediction
+            cgm.cpd,
+            te.value AS toxicity_value
           FROM compound_gene_map cgm
           LEFT JOIN toxicity_endpoint te
             ON te.cpd = cgm.cpd
+          CROSS JOIN params p
           WHERE cgm.genesymbol IS NOT NULL
             AND TRIM(cgm.genesymbol) <> ''
-            AND te.endpoint = ?
+            AND te.endpoint = p.endpoint
             AND te.value IS NOT NULL
-            AND (? IS NULL OR te.value >= ?)
-            AND (? IS NULL OR te.value <= ?)
-          GROUP BY cgm.genesymbol
+            AND (p.threshold_min IS NULL OR te.value >= p.threshold_min)
+            AND (p.threshold_max IS NULL OR te.value <= p.threshold_max)
+          GROUP BY cgm.genesymbol, cgm.cpd
+        ),
+        ranked AS (
+          SELECT
+            genesymbol,
+            toxicity_value,
+            ROW_NUMBER() OVER (
+              PARTITION BY genesymbol
+              ORDER BY toxicity_value
+            ) AS rn,
+            COUNT(*) OVER (
+              PARTITION BY genesymbol
+            ) AS n
+          FROM toxic_distribution
+        ),
+        quantiles AS (
+          SELECT
+            genesymbol,
+            COUNT(*) AS toxic_compound_count,
+            MAX(
+              CASE
+                WHEN rn = CAST((n - 1) * 0.50 AS INT) + 1
+                THEN toxicity_value
+              END
+            ) AS median_toxicity,
+            MAX(
+              CASE
+                WHEN rn = CAST((n - 1) * 0.90 AS INT) + 1
+                THEN toxicity_value
+              END
+            ) AS p90_toxicity,
+            MAX(toxicity_value) AS max_prediction
+          FROM ranked
+          GROUP BY genesymbol
         )
         SELECT
           gs.genesymbol,
           gs.gene_name,
           gs.compound_count,
-          COALESCE(ts.toxic_compound_count, 0) AS toxic_compound_count,
-          CASE
-            WHEN gs.compound_count = 0 THEN 0
-            ELSE ROUND(COALESCE(ts.toxic_compound_count, 0) * 100.0 / gs.compound_count, 2)
-          END AS toxic_ratio,
+          q.toxic_compound_count,
           gs.ko_count,
-          ts.max_prediction
+          ROUND(q.median_toxicity, 4) AS median_toxicity,
+          ROUND(q.p90_toxicity, 4) AS p90_toxicity,
+          ROUND(q.max_prediction, 4) AS max_prediction
         FROM gene_scope gs
-        LEFT JOIN toxic_scope ts
-          ON ts.genesymbol = gs.genesymbol
-        WHERE COALESCE(ts.toxic_compound_count, 0) > 0
-        ORDER BY toxic_compound_count DESC, max_prediction DESC, gs.genesymbol ASC
+        JOIN quantiles q
+          ON q.genesymbol = gs.genesymbol
+        WHERE q.toxic_compound_count > 0
+        ORDER BY q.toxic_compound_count DESC, q.max_prediction DESC, gs.genesymbol ASC
         LIMIT 10;
         """
 
         with sqlite3.connect(db_path) as conn:
           rows = conn.execute(
             query,
-            (endpoint, threshold_min, threshold_min, threshold_max, threshold_max),
+            (endpoint, threshold_min, threshold_max),
           ).fetchall()
           print("rows:", len(rows))
           for row in rows:

@@ -15,7 +15,7 @@ use_case_description:
     - title: Toxicity Boxplot per Gene
       description: Boxplot summarizes endpoint toxicity distribution per top-ranked gene under active threshold filters.
     - title: Gene Toxicity Table
-      description: Table reports toxic compounds, total compounds, ratio, KO coverage, and maximum prediction per gene.
+      description: Table reports toxic compounds, total compounds, KO coverage, and distribution quantiles per gene.
   interpretation:
     - Higher-ranked genes indicate stronger exploratory linkage to compounds above the active toxicity threshold.
     - Results are endpoint-context dependent and should be interpreted as exploratory signals, not causal confirmation.
@@ -33,7 +33,7 @@ methods_modal:
     - title: Threshold Filtering
       description: Keep toxicity predictions inside the configured threshold range and aggregate toxic compounds per gene.
     - title: Gene Aggregation
-      description: Compute toxic compound count, total compound count, KO count, toxic ratio, and maximum prediction per gene.
+      description: Compute toxic compound count, total compound count, KO count, median toxicity, p90 toxicity, and maximum prediction per gene.
     - title: Visualization and Table Output
       description: Render top-gene bar ranking and return paginated table output under the guided response contract.
   footer_note: Endpoint-level values are model-derived exploratory predictions and should be interpreted with domain context.
@@ -44,7 +44,7 @@ defaults:
     endpoint_group: all
     endpoint: avian
     y_value:
-      min: 0.67
+      min: 0
 
 executor_config:
   bar_top_n: 15
@@ -148,8 +148,11 @@ table:
     - id: compound_count
       label: Total Compounds
       type: number
-    - id: toxic_ratio
-      label: Toxic Ratio (%)
+    - id: median_toxicity
+      label: Median Toxicity
+      type: number
+    - id: p90_toxicity
+      label: P90 Toxicity
       type: number
     - id: ko_count
       label: KO Count

@@ -183,7 +183,14 @@ export interface GuidedBoxplotGroup {
   median: number;
   q3: number;
   max: number;
-  points?: number[];
+  points?: GuidedBoxplotPoint[];
+}
+
+export interface GuidedBoxplotPoint {
+  cpd: string;
+  compoundname?: string | null;
+  endpoint?: string;
+  toxicity_value: number;
 }
 
 export interface GuidedBoxplotVisualizationData {
