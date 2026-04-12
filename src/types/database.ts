@@ -157,6 +157,20 @@ export interface GeneDetailSummary {
   updated_at: string;
 }
 
+export interface GeneDetailOverviewSummary {
+  linked_compounds_total: number;
+  toxicity_compounds: number;
+  excluded_no_toxicity: number;
+  endpoint_count: number;
+  toxicity_coverage_pct: number | null;
+}
+
+export interface GeneDetailOverviewResponse {
+  ko: string;
+  summary: GeneDetailOverviewSummary;
+  toxicity_matrix: PathwayToxicityMatrix;
+}
+
 export interface GeneAssociatedCompoundRow {
   cpd: string;
   compoundname: string | null;

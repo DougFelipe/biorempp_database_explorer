@@ -976,6 +976,104 @@ app.get('/api/genes/:ko', (req, res, next) => {
   }
 });
 
+app.get('/api/genes/:ko/overview', (req, res, next) => {
+  try {
+    const ko = String(req.params.ko || '').trim().toUpperCase();
+    if (!ko) {
+      res.status(400).json({ error: 'Missing required parameter: ko' });
+      return;
+    }
+
+    const exists = db.prepare('SELECT 1 FROM gene_summary WHERE ko = ? LIMIT 1').get(ko);
+    if (!exists) {
+      res.status(404).json({ error: `Gene "${ko}" not found` });
+      return;
+    }
+
+    const linkedCompoundsTotal = db
+      .prepare(`
+        SELECT COUNT(*) AS total
+        FROM (
+          SELECT DISTINCT cpd
+          FROM compound_gene_card
+          WHERE ko = ?
+        )
+      `)
+      .get(ko).total;
+
+    const endpoints = readDistinctStrings(`
+      SELECT DISTINCT endpoint AS value
+      FROM toxicity_endpoint
+      ORDER BY endpoint ASC
+    `);
+
+    const toxicityRows = db
+      .prepare(`
+        SELECT
+          te.cpd,
+          te.endpoint,
+          te.label,
+          te.value,
+          cs.compoundname
+        FROM toxicity_endpoint te
+        JOIN (
+          SELECT DISTINCT cpd
+          FROM compound_gene_card
+          WHERE ko = ?
+        ) cpd_scope
+          ON cpd_scope.cpd = te.cpd
+        LEFT JOIN compound_summary cs
+          ON cs.cpd = te.cpd
+        ORDER BY COALESCE(cs.compoundname, te.cpd) ASC, te.cpd ASC, te.endpoint ASC
+      `)
+      .all(ko);
+
+    const compoundsWithToxicity = new Map();
+    for (const row of toxicityRows) {
+      const cpd = String(row.cpd || '').trim();
+      if (!cpd) {
+        continue;
+      }
+      if (!compoundsWithToxicity.has(cpd)) {
+        compoundsWithToxicity.set(cpd, {
+          cpd,
+          compoundname: row.compoundname || null,
+        });
+      }
+    }
+
+    const compounds = [...compoundsWithToxicity.values()];
+    const toxicityCompounds = compounds.length;
+    const excludedNoToxicity = Math.max(0, linkedCompoundsTotal - toxicityCompounds);
+    const toxicityCoveragePct =
+      linkedCompoundsTotal > 0 ? Math.round((toxicityCompounds / linkedCompoundsTotal) * 100) : null;
+
+    res.json({
+      ko,
+      summary: {
+        linked_compounds_total: linkedCompoundsTotal,
+        toxicity_compounds: toxicityCompounds,
+        excluded_no_toxicity: excludedNoToxicity,
+        endpoint_count: endpoints.length,
+        toxicity_coverage_pct: toxicityCoveragePct,
+      },
+      toxicity_matrix: {
+        compounds,
+        endpoints,
+        cells: toxicityRows.map((row) => ({
+          cpd: row.cpd,
+          endpoint: row.endpoint,
+          label: row.label,
+          value: row.value === null ? null : Number(row.value),
+          risk_bucket: deriveRiskBucket(row.label),
+        })),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/genes/:ko/compounds', (req, res, next) => {
   try {
     const ko = String(req.params.ko || '').trim().toUpperCase();

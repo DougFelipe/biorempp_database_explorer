@@ -5,6 +5,7 @@ import type {
   CompoundSummary,
   CompoundMetadata,
   GeneDetailSummary,
+  GeneDetailOverviewResponse,
   GeneAssociatedCompoundRow,
   GeneMetadata,
   GeneSummary,
@@ -134,6 +135,10 @@ export async function getGenes(
 
 export async function getGeneByKo(ko: string): Promise<GeneDetailSummary | null> {
   return fetchJson(`/api/genes/${encodeURIComponent(ko)}`);
+}
+
+export async function getGeneDetailOverview(ko: string): Promise<GeneDetailOverviewResponse> {
+  return fetchJson(`/api/genes/${encodeURIComponent(ko)}/overview`);
 }
 
 export async function getGeneAssociatedCompounds(
