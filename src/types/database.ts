@@ -144,6 +144,85 @@ export interface GeneSummary {
   updated_at: string;
 }
 
+export interface GeneDetailSummary {
+  ko: string;
+  genesymbol: string | null;
+  genename: string | null;
+  compound_count: number;
+  pathway_count: number;
+  enzyme_activities: string[];
+  compound_class_count: number;
+  reference_agency_count: number;
+  toxicity_coverage_pct: number | null;
+  updated_at: string;
+}
+
+export interface GeneAssociatedCompoundRow {
+  cpd: string;
+  compoundname: string | null;
+  compoundclass: string | null;
+  reference_ag: string | null;
+  reference_count: number;
+  ko_count: number;
+  gene_count: number;
+  pathway_count: number;
+  toxicity_risk_mean: number | null;
+  high_risk_endpoint_count: number;
+  smiles: string | null;
+  updated_at: string;
+}
+
+export interface GeneMetadataSource {
+  name: string;
+  role: string;
+  color: 'green' | 'blue' | 'purple' | 'orange' | string;
+}
+
+export interface GeneMetadataChebiItem {
+  id: string;
+  compound_name: string | null;
+}
+
+export interface GeneMetadataSmilesItem {
+  value: string;
+  compound_name: string | null;
+}
+
+export interface GeneMetadataReactionItem {
+  id: string;
+  description: string | null;
+}
+
+export interface GeneMetadata {
+  identifiers: {
+    ko: string;
+    gene_symbol: string | null;
+    gene_name: string | null;
+    kegg_ko_id: string;
+    ec_numbers: string[];
+    chebi_ids: string[];
+    smiles: string[];
+    reaction_ids: string[];
+    chebi_items: GeneMetadataChebiItem[];
+    smiles_items: GeneMetadataSmilesItem[];
+    reaction_items: GeneMetadataReactionItem[];
+  };
+  data_sources: GeneMetadataSource[];
+  quantitative_overview: {
+    linked_compounds: number;
+    compound_classes: number;
+    pathway_annotations: number;
+    pathways_hadeg: number;
+    pathways_kegg: number;
+    pathways_compound_pathway: number;
+    ec_count: number;
+    enzyme_activity_count: number;
+    reference_agencies: number;
+    toxicity_coverage_pct: number | null;
+    reaction_id_count: number;
+  };
+}
+
 export interface PathwaySummary {
   pathway: string;
   source: string;

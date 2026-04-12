@@ -4,7 +4,11 @@ import { getGenes } from '../services/api';
 import type { GeneSummary, GeneFilters } from '../types/database';
 import { Pagination } from './Pagination';
 
-export function GeneExplorer() {
+interface GeneExplorerProps {
+  onGeneSelect?: (ko: string) => void;
+}
+
+export function GeneExplorer({ onGeneSelect }: GeneExplorerProps) {
   const [genes, setGenes] = useState<GeneSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -164,7 +168,11 @@ export function GeneExplorer() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {genes.map((gene) => (
-                  <tr key={gene.ko} className="hover:bg-gray-50">
+                  <tr
+                    key={gene.ko}
+                    className={`hover:bg-gray-50 ${onGeneSelect ? 'cursor-pointer' : ''}`}
+                    onClick={() => onGeneSelect?.(gene.ko)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-600">
                       {gene.ko}
                     </td>

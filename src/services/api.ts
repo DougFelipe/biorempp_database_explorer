@@ -4,6 +4,9 @@ import type {
   CompoundClassSummary,
   CompoundSummary,
   CompoundMetadata,
+  GeneDetailSummary,
+  GeneAssociatedCompoundRow,
+  GeneMetadata,
   GeneSummary,
   PathwaySummary,
   PathwayDetailOverviewResponse,
@@ -127,6 +130,26 @@ export async function getGenes(
       pageSize: pagination.pageSize,
     })}`
   );
+}
+
+export async function getGeneByKo(ko: string): Promise<GeneDetailSummary | null> {
+  return fetchJson(`/api/genes/${encodeURIComponent(ko)}`);
+}
+
+export async function getGeneAssociatedCompounds(
+  ko: string,
+  pagination: PaginationParams = { page: 1, pageSize: 25 }
+): Promise<PaginatedResponse<GeneAssociatedCompoundRow>> {
+  return fetchJson(
+    `/api/genes/${encodeURIComponent(ko)}/compounds${buildQuery({
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    })}`
+  );
+}
+
+export async function getGeneMetadata(ko: string): Promise<GeneMetadata> {
+  return fetchJson(`/api/genes/${encodeURIComponent(ko)}/metadata`);
 }
 
 export async function getPathways(

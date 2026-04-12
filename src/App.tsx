@@ -6,6 +6,7 @@ import { CompoundDetail } from './components/CompoundDetail';
 import { CompoundClassDetail } from './components/CompoundClassDetail';
 import { GuidedAnalysisPage } from './components/GuidedAnalysisPage';
 import { GeneExplorer } from './components/GeneExplorer';
+import { GeneDetail } from './components/GeneDetail';
 import { HomePage } from './components/HomePage';
 import { PathwayExplorer } from './components/PathwayExplorer';
 import { PathwayDetail } from './components/PathwayDetail';
@@ -15,6 +16,7 @@ type View = 'home' | 'compounds' | 'compound-classes' | 'genes' | 'pathways' | '
 type Route =
   | { kind: 'view'; view: View }
   | { kind: 'compound'; cpd: string }
+  | { kind: 'gene'; ko: string }
   | { kind: 'compoundClass'; compoundclass: string }
   | { kind: 'pathway'; pathway: string; source?: string };
 
@@ -47,6 +49,12 @@ function parseRoute(pathname: string): Route {
   }
   if (path === '/genes') {
     return { kind: 'view', view: 'genes' };
+  }
+  if (path.startsWith('/genes/')) {
+    const ko = decodeURIComponent(path.slice('/genes/'.length)).trim();
+    if (ko) {
+      return { kind: 'gene', ko: ko.toUpperCase() };
+    }
   }
   if (path === '/pathways') {
     return { kind: 'view', view: 'pathways' };
@@ -141,6 +149,10 @@ function App() {
     navigate(`/compounds/${encodeURIComponent(cpd)}`);
   }
 
+  function openGeneDetail(ko: string) {
+    navigate(`/genes/${encodeURIComponent(ko)}`);
+  }
+
   function openPathwayDetail(pathway: string, source?: string) {
     const encodedPathway = encodeURIComponent(pathway.trim());
     const normalizedSource = source?.trim().toUpperCase();
@@ -158,6 +170,8 @@ function App() {
   const activeView: View =
     route.kind === 'compound'
       ? 'compounds'
+      : route.kind === 'gene'
+      ? 'genes'
       : route.kind === 'compoundClass'
       ? 'compound-classes'
       : route.kind === 'pathway'
@@ -274,7 +288,9 @@ function App() {
         {route.kind === 'view' && route.view === 'compound-classes' && (
           <CompoundClassExplorer onCompoundClassSelect={openCompoundClassDetail} />
         )}
-        {route.kind === 'view' && route.view === 'genes' && <GeneExplorer />}
+        {route.kind === 'view' && route.view === 'genes' && (
+          <GeneExplorer onGeneSelect={openGeneDetail} />
+        )}
         {route.kind === 'view' && route.view === 'pathways' && (
           <PathwayExplorer onPathwaySelect={openPathwayDetail} />
         )}
@@ -286,6 +302,13 @@ function App() {
           <CompoundDetail
             cpd={route.cpd}
             onBack={() => navigateToView('compounds')}
+          />
+        )}
+        {route.kind === 'gene' && (
+          <GeneDetail
+            ko={route.ko}
+            onBack={() => navigateToView('genes')}
+            onCompoundSelect={openCompoundDetail}
           />
         )}
         {route.kind === 'compoundClass' && (
