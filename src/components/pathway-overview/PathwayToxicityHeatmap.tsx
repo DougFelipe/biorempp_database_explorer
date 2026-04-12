@@ -6,6 +6,12 @@ import { toToxicityFacets } from '../../utils/toxicityEndpointGroups';
 
 interface PathwayToxicityHeatmapProps {
   matrix: PathwayToxicityMatrix;
+  title?: string;
+  subtitle?: string;
+  rowLabel?: string;
+  rowLabelPlural?: string;
+  rowSort?: 'provided' | 'mean_toxicity_desc';
+  totalRowsInScope?: number;
 }
 
 function predictionCellColor(value: number | null) {
@@ -28,7 +34,15 @@ const GROUP_HEADER_CLASS: Record<string, string> = {
   other: 'bg-gray-50 text-gray-800',
 };
 
-export function PathwayToxicityHeatmap({ matrix }: PathwayToxicityHeatmapProps) {
+export function PathwayToxicityHeatmap({
+  matrix,
+  title = 'Toxicity Heatmap',
+  subtitle = 'Compounds on Y-axis and grouped endpoints on top',
+  rowLabel = 'Compound',
+  rowLabelPlural = 'Compounds',
+  rowSort = 'mean_toxicity_desc',
+  totalRowsInScope,
+}: PathwayToxicityHeatmapProps) {
   const endpointSeed: ToxicityHeatmapDatum[] = matrix.endpoints.map((endpoint) => ({
     endpoint,
     label: null,
@@ -43,37 +57,45 @@ export function PathwayToxicityHeatmap({ matrix }: PathwayToxicityHeatmapProps) 
   );
   const minTableWidth = Math.max(760, 280 + endpointOrder.length * 52);
 
-  const compounds = matrix.compounds
-    .map((compound) => {
-      let sum = 0;
-      let count = 0;
-      for (const endpoint of endpointOrder) {
-        const value = cellMap.get(`${compound.cpd}|${endpoint}`)?.value ?? null;
-        if (value !== null && Number.isFinite(value)) {
-          sum += value;
-          count += 1;
-        }
-      }
-      return {
-        ...compound,
-        meanToxicity: count > 0 ? sum / count : -1,
-      };
-    })
-    .sort((a, b) => b.meanToxicity - a.meanToxicity || (a.compoundname || a.cpd).localeCompare(b.compoundname || b.cpd));
+  const compounds =
+    rowSort === 'mean_toxicity_desc'
+      ? matrix.compounds
+          .map((compound) => {
+            let sum = 0;
+            let count = 0;
+            for (const endpoint of endpointOrder) {
+              const value = cellMap.get(`${compound.cpd}|${endpoint}`)?.value ?? null;
+              if (value !== null && Number.isFinite(value)) {
+                sum += value;
+                count += 1;
+              }
+            }
+            return {
+              ...compound,
+              meanToxicity: count > 0 ? sum / count : -1,
+            };
+          })
+          .sort(
+            (a, b) =>
+              b.meanToxicity - a.meanToxicity || (a.compoundname || a.cpd).localeCompare(b.compoundname || b.cpd)
+          )
+      : matrix.compounds;
+
+  const rowsInScope = totalRowsInScope ?? matrix.compounds.length;
 
   if (endpointOrder.length === 0 || compounds.length === 0) {
     return (
-      <ChartCard title="Toxicity Heatmap" subtitle="No toxicity data available for compounds in this pathway.">
+      <ChartCard title={title} subtitle={`No toxicity data available for ${rowLabelPlural.toLowerCase()}.`}>
         <p className="text-sm text-gray-500">No matrix data available.</p>
       </ChartCard>
     );
   }
 
   return (
-    <ChartCard title="Toxicity Heatmap" subtitle="Compounds on Y-axis and grouped endpoints on top">
+    <ChartCard title={title} subtitle={subtitle}>
       <div className="space-y-3">
         <p className="text-xs text-gray-600">
-          Showing {compounds.length} of {matrix.compounds.length} compounds
+          Showing {compounds.length} of {rowsInScope} {rowLabelPlural.toLowerCase()}
         </p>
 
         <div className="flex items-center gap-2 text-xs text-gray-600">
@@ -93,7 +115,7 @@ export function PathwayToxicityHeatmap({ matrix }: PathwayToxicityHeatmapProps) 
             <thead>
               <tr>
                 <th className="sticky top-0 left-0 z-30 bg-white px-2 py-1 text-left text-[11px] font-medium text-gray-600 w-60">
-                  Compound
+                  {rowLabel}
                 </th>
                 {facets.map((facet) => (
                   <th

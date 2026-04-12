@@ -2,16 +2,19 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import {
   getGeneByKo,
+  getGeneDetailOverview,
   getGeneAssociatedCompounds,
   getGeneMetadata,
 } from '../services/api';
 import type {
   GeneDetailSummary,
+  GeneDetailOverviewResponse,
   GeneAssociatedCompoundRow,
   GeneMetadata,
 } from '../types/database';
 import { Pagination } from './Pagination';
 import { GeneMetadataPanel } from './GeneMetadataPanel';
+import { PathwayToxicityHeatmap } from './pathway-overview/PathwayToxicityHeatmap';
 
 interface GeneDetailProps {
   ko: string;
@@ -23,12 +26,14 @@ type GeneTab = 'overview' | 'compounds' | 'metadata';
 
 export function GeneDetail({ ko, onBack, onCompoundSelect }: GeneDetailProps) {
   const [summary, setSummary] = useState<GeneDetailSummary | null>(null);
+  const [overview, setOverview] = useState<GeneDetailOverviewResponse | null>(null);
   const [compounds, setCompounds] = useState<GeneAssociatedCompoundRow[]>([]);
   const [metadata, setMetadata] = useState<GeneMetadata | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [compoundsLoading, setCompoundsLoading] = useState(true);
   const [metadataLoading, setMetadataLoading] = useState(false);
+  const [overviewLoading, setOverviewLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<GeneTab>('overview');
   const [compoundPage, setCompoundPage] = useState(1);
   const [compoundTotalPages, setCompoundTotalPages] = useState(1);
@@ -37,6 +42,7 @@ export function GeneDetail({ ko, onBack, onCompoundSelect }: GeneDetailProps) {
   useEffect(() => {
     setActiveTab('overview');
     setCompoundPage(1);
+    setOverview(null);
     setMetadata(null);
   }, [ko]);
 
@@ -54,6 +60,13 @@ export function GeneDetail({ ko, onBack, onCompoundSelect }: GeneDetailProps) {
     }
     loadMetadata();
   }, [activeTab, ko, metadata]);
+
+  useEffect(() => {
+    if (activeTab !== 'overview' || overview) {
+      return;
+    }
+    loadOverview();
+  }, [activeTab, ko, overview]);
 
   async function loadSummary() {
     setLoading(true);
@@ -94,6 +107,19 @@ export function GeneDetail({ ko, onBack, onCompoundSelect }: GeneDetailProps) {
       setMetadata(null);
     } finally {
       setMetadataLoading(false);
+    }
+  }
+
+  async function loadOverview() {
+    setOverviewLoading(true);
+    try {
+      const response = await getGeneDetailOverview(ko);
+      setOverview(response);
+    } catch (err) {
+      console.error('Error loading gene overview:', err);
+      setOverview(null);
+    } finally {
+      setOverviewLoading(false);
     }
   }
 
@@ -203,11 +229,53 @@ export function GeneDetail({ ko, onBack, onCompoundSelect }: GeneDetailProps) {
 
       <div className="p-6">
         {activeTab === 'overview' && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-            <h3 className="text-lg font-semibold text-gray-900">Overview</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Overview content for gene detail will be modeled in the next phase.
-            </p>
+          <div className="space-y-4">
+            {overviewLoading ? (
+              <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
+                <p className="text-sm text-gray-600">Loading overview...</p>
+              </div>
+            ) : overview ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Linked Compounds</p>
+                    <p className="text-xl font-semibold text-gray-900 mt-1">{overview.summary.linked_compounds_total}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">With Toxicity</p>
+                    <p className="text-xl font-semibold text-gray-900 mt-1">{overview.summary.toxicity_compounds}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Excluded (No ToxCSM)</p>
+                    <p className="text-xl font-semibold text-gray-900 mt-1">{overview.summary.excluded_no_toxicity}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Endpoints</p>
+                    <p className="text-xl font-semibold text-gray-900 mt-1">{overview.summary.endpoint_count}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Toxicity Coverage</p>
+                    <p className="text-xl font-semibold text-gray-900 mt-1">
+                      {overview.summary.toxicity_coverage_pct == null ? '-' : `${overview.summary.toxicity_coverage_pct}%`}
+                    </p>
+                  </div>
+                </div>
+
+                <PathwayToxicityHeatmap
+                  matrix={overview.toxicity_matrix}
+                  title="Toxicity Heatmap"
+                  subtitle="Compounds on Y-axis and grouped endpoints on top"
+                  rowLabel="Compound"
+                  rowLabelPlural="linked compounds"
+                  rowSort="provided"
+                  totalRowsInScope={overview.summary.linked_compounds_total}
+                />
+              </>
+            ) : (
+              <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
+                <p className="text-sm text-gray-600">Overview data unavailable for this gene.</p>
+              </div>
+            )}
           </div>
         )}
 
