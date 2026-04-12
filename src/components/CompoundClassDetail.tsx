@@ -151,14 +151,14 @@ export function CompoundClassDetail({ compoundclass, onBack }: CompoundClassDeta
 
       <div className="p-6 space-y-4">
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <ChartCard title="KO Distribution" subtitle="Top KOs by number of gene associations">
+          <ChartCard title="KO Distribution" subtitle="Top KOs by linked compounds">
             <HorizontalBarChart
               items={toPathwayKoBarItems(overview.ko_distribution)}
               emptyMessage="No KO distribution available."
             />
           </ChartCard>
 
-          <ChartCard title="Gene Distribution" subtitle="Top genes in this class">
+          <ChartCard title="Gene Distribution" subtitle="Top genes by linked compounds">
             <HorizontalBarChart
               items={toPathwayGeneBarItems(overview.gene_distribution)}
               emptyMessage="No gene distribution available."

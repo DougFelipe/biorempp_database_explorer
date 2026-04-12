@@ -1015,44 +1015,44 @@ app.get('/api/compound-classes/detail/overview', (req, res, next) => {
       geneRows.map((row) => String(row.genesymbol || '').trim()).filter((value) => value.length > 0)
     );
 
-    const koToGenes = new Map();
+    const koToCompounds = new Map();
     for (const row of geneRows) {
       const ko = String(row.ko || '').trim();
-      const gene = String(row.genesymbol || '').trim();
-      if (!ko || !gene) {
+      const cpd = String(row.cpd || '').trim();
+      if (!ko || !cpd) {
         continue;
       }
-      if (!koToGenes.has(ko)) {
-        koToGenes.set(ko, new Set());
+      if (!koToCompounds.has(ko)) {
+        koToCompounds.set(ko, new Set());
       }
-      koToGenes.get(ko).add(gene);
+      koToCompounds.get(ko).add(cpd);
     }
 
-    const koDistribution = [...koToGenes.entries()]
-      .map(([ko, genes]) => ({
+    const koDistribution = [...koToCompounds.entries()]
+      .map(([ko, compounds]) => ({
         ko,
-        count: genes.size,
+        count: compounds.size,
       }))
       .sort((a, b) => b.count - a.count || a.ko.localeCompare(b.ko))
       .slice(0, 10);
 
-    const geneToKos = new Map();
+    const geneToCompounds = new Map();
     for (const row of geneRows) {
-      const ko = String(row.ko || '').trim();
       const gene = String(row.genesymbol || '').trim();
-      if (!ko || !gene) {
+      const cpd = String(row.cpd || '').trim();
+      if (!cpd || !gene) {
         continue;
       }
-      if (!geneToKos.has(gene)) {
-        geneToKos.set(gene, new Set());
+      if (!geneToCompounds.has(gene)) {
+        geneToCompounds.set(gene, new Set());
       }
-      geneToKos.get(gene).add(ko);
+      geneToCompounds.get(gene).add(cpd);
     }
 
-    const geneDistribution = [...geneToKos.entries()]
-      .map(([gene, kos]) => ({
+    const geneDistribution = [...geneToCompounds.entries()]
+      .map(([gene, compounds]) => ({
         gene,
-        count: kos.size,
+        count: compounds.size,
       }))
       .sort((a, b) => b.count - a.count || a.gene.localeCompare(b.gene))
       .slice(0, 10);
@@ -1257,44 +1257,44 @@ app.get('/api/pathways/detail/overview', (req, res, next) => {
       geneRows.map((row) => String(row.genesymbol || '').trim()).filter((value) => value.length > 0)
     );
 
-    const koToGenes = new Map();
-    for (const row of geneRows) {
+    const koToCompounds = new Map();
+    for (const row of relations) {
       const ko = String(row.ko || '').trim();
-      const gene = String(row.genesymbol || '').trim();
-      if (!ko || !gene) {
+      const cpd = String(row.cpd || '').trim();
+      if (!ko || !cpd) {
         continue;
       }
-      if (!koToGenes.has(ko)) {
-        koToGenes.set(ko, new Set());
+      if (!koToCompounds.has(ko)) {
+        koToCompounds.set(ko, new Set());
       }
-      koToGenes.get(ko).add(gene);
+      koToCompounds.get(ko).add(cpd);
     }
 
-    const koDistribution = [...koToGenes.entries()]
-      .map(([ko, genes]) => ({
+    const koDistribution = [...koToCompounds.entries()]
+      .map(([ko, compounds]) => ({
         ko,
-        count: genes.size,
+        count: compounds.size,
       }))
       .sort((a, b) => b.count - a.count || a.ko.localeCompare(b.ko))
       .slice(0, 10);
 
-    const geneToKos = new Map();
+    const geneToCompounds = new Map();
     for (const row of geneRows) {
-      const ko = String(row.ko || '').trim();
       const gene = String(row.genesymbol || '').trim();
-      if (!ko || !gene) {
+      const cpd = String(row.cpd || '').trim();
+      if (!cpd || !gene) {
         continue;
       }
-      if (!geneToKos.has(gene)) {
-        geneToKos.set(gene, new Set());
+      if (!geneToCompounds.has(gene)) {
+        geneToCompounds.set(gene, new Set());
       }
-      geneToKos.get(gene).add(ko);
+      geneToCompounds.get(gene).add(cpd);
     }
 
-    const geneDistribution = [...geneToKos.entries()]
-      .map(([gene, kos]) => ({
+    const geneDistribution = [...geneToCompounds.entries()]
+      .map(([gene, compounds]) => ({
         gene,
-        count: kos.size,
+        count: compounds.size,
       }))
       .sort((a, b) => b.count - a.count || a.gene.localeCompare(b.gene))
       .slice(0, 10);
