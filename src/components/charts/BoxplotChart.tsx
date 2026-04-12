@@ -22,7 +22,7 @@ export function BoxplotChart({
 	const axisTop = 12;
 	const axisBottom = 62;
 	const axisHeight = chartHeight - axisTop - axisBottom;
-	const axisWidth = Math.max(760, groups.length * 92);
+	const axisWidth = Math.max(640, groups.length * 68);
 	const svgWidth = axisLeft + axisWidth + 10;
 	const svgHeight = chartHeight;
 
@@ -79,7 +79,7 @@ export function BoxplotChart({
 					{groups.map((group, idx) => {
 						const spacing = axisWidth / Math.max(1, groups.length);
 						const centerX = axisLeft + spacing * idx + spacing / 2;
-						const boxWidth = Math.min(28, spacing * 0.42);
+						const boxWidth = Math.min(26, Math.max(12, spacing * 0.52));
 						const color = palette[idx % palette.length];
 						const pointValues = Array.isArray(group.points) ? group.points : [];
 						const pointJitter = Math.max(3, boxWidth * 0.42);

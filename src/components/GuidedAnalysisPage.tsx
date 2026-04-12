@@ -363,7 +363,7 @@ export function GuidedAnalysisPage({ onCompoundSelect }: GuidedAnalysisPageProps
             onReset={handleResetFilters}
           />
 
-          {executionLoading ? (
+          {!execution && executionLoading ? (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500">
               Executing query...
             </div>
@@ -373,6 +373,11 @@ export function GuidedAnalysisPage({ onCompoundSelect }: GuidedAnalysisPageProps
             </div>
           ) : execution ? (
             <>
+              {executionLoading ? (
+                <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-4 py-2 text-sm">
+                  Refreshing results...
+                </div>
+              ) : null}
               <VisualizationRendererRegistry
                 visualizations={execution.visualizations}
                 onCompoundSelect={onCompoundSelect}
