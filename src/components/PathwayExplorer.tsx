@@ -8,6 +8,9 @@ interface PathwayExplorerProps {
   onPathwaySelect?: (pathway: string, source?: string) => void;
 }
 
+const SOURCE_OPTIONS = ['KEGG', 'HADEG'] as const;
+const DEFAULT_SOURCE: (typeof SOURCE_OPTIONS)[number] = 'KEGG';
+
 export function PathwayExplorer({ onPathwaySelect }: PathwayExplorerProps) {
   const [pathways, setPathways] = useState<PathwaySummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,7 +19,7 @@ export function PathwayExplorer({ onPathwaySelect }: PathwayExplorerProps) {
   const [total, setTotal] = useState(0);
   const [pageSize] = useState(50);
 
-  const [filters, setFilters] = useState<PathwayFilters>({});
+  const [filters, setFilters] = useState<PathwayFilters>({ source: DEFAULT_SOURCE });
   const [searchInput, setSearchInput] = useState('');
 
   useEffect(() => {
@@ -37,13 +40,13 @@ export function PathwayExplorer({ onPathwaySelect }: PathwayExplorerProps) {
     }
   }
 
-  function handleFilterChange(key: keyof PathwayFilters, value: string | undefined) {
+  function handleFilterChange<K extends keyof PathwayFilters>(key: K, value: PathwayFilters[K] | undefined) {
     setFilters(prev => {
       const newFilters = { ...prev };
       if (value === '' || value === undefined) {
         delete newFilters[key];
       } else {
-        newFilters[key] = value as never;
+        newFilters[key] = value;
       }
       return newFilters;
     });
@@ -54,20 +57,32 @@ export function PathwayExplorer({ onPathwaySelect }: PathwayExplorerProps) {
     handleFilterChange('search', searchInput || undefined);
   }
 
+  function handleSourceSelect(source: (typeof SOURCE_OPTIONS)[number]) {
+    handleFilterChange('source', source);
+  }
+
   function clearFilters() {
-    setFilters({});
+    setFilters({ source: DEFAULT_SOURCE });
     setSearchInput('');
     setCurrentPage(1);
   }
 
-  const activeFilterCount = Object.keys(filters).length;
+  const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
+    if (value === undefined || value === '') {
+      return false;
+    }
+    if (key === 'source') {
+      return value !== DEFAULT_SOURCE;
+    }
+    return true;
+  }).length;
 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Pathway Explorer</h2>
 
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
           <div className="flex-1 relative">
             <input
               type="text"
@@ -85,22 +100,31 @@ export function PathwayExplorer({ onPathwaySelect }: PathwayExplorerProps) {
           >
             Search
           </button>
+          <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50 self-start">
+            {SOURCE_OPTIONS.map((source) => {
+              const selected = filters.source === source;
+              return (
+                <button
+                  key={source}
+                  type="button"
+                  onClick={() => handleSourceSelect(source)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    selected
+                      ? source === 'KEGG'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-blue-100 text-blue-800'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  {source}
+                </button>
+              );
+            })}
+          </div>
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Data Source
-          </label>
-          <select
-            value={filters.source || ''}
-            onChange={(e) => handleFilterChange('source', e.target.value || undefined)}
-            className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Sources</option>
-            <option value="HADEG">HADEG</option>
-            <option value="KEGG">KEGG</option>
-          </select>
-        </div>
+        <p className="text-xs text-gray-500">
+          Showing one database at a time to keep pathway rankings easier to inspect.
+        </p>
 
         {activeFilterCount > 0 && (
           <button
