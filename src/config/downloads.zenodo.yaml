@@ -1,5 +1,5 @@
 version: v1
-title: External Dataset Downloads
+title: Databases Downloads
 note: Downloads are hosted on Zenodo and open in a new tab. Update URLs as needed.
 items:
   - id: sqlite
