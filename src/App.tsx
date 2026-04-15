@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { BarChart3, Database, Dna, GitBranch, FlaskConical, Home, Layers3, ShieldAlert } from 'lucide-react';
 import { CompoundExplorer } from './components/CompoundExplorer';
 import { CompoundClassExplorer } from './components/CompoundClassExplorer';
 import { CompoundDetail } from './components/CompoundDetail';
 import { CompoundClassDetail } from './components/CompoundClassDetail';
+import { DatabaseMetricsPage } from './components/DatabaseMetricsPage';
 import { GuidedAnalysisPage } from './components/GuidedAnalysisPage';
 import { GeneExplorer } from './components/GeneExplorer';
 import { GeneDetail } from './components/GeneDetail';
@@ -12,7 +12,7 @@ import { PathwayExplorer } from './components/PathwayExplorer';
 import { PathwayDetail } from './components/PathwayDetail';
 import { ToxicityExplorer } from './components/ToxicityExplorer';
 
-type View = 'home' | 'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'guided-analysis';
+type View = 'home' | 'database-metrics' | 'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'guided-analysis';
 type Route =
   | { kind: 'view'; view: View }
   | { kind: 'compound'; cpd: string }
@@ -22,6 +22,7 @@ type Route =
 
 const VIEW_PATHS: Record<View, string> = {
   home: '/',
+  'database-metrics': '/database-metrics',
   compounds: '/compounds',
   'compound-classes': '/compound-classes',
   genes: '/genes',
@@ -43,6 +44,9 @@ function parseRoute(pathname: string): Route {
   }
   if (path === '/compounds') {
     return { kind: 'view', view: 'compounds' };
+  }
+  if (path === '/database-metrics') {
+    return { kind: 'view', view: 'database-metrics' };
   }
   if (path === '/compound-classes') {
     return { kind: 'view', view: 'compound-classes' };
@@ -167,120 +171,55 @@ function App() {
     navigate(`/compound-classes/detail/${encodeURIComponent(compoundclass.trim())}`);
   }
 
-  const activeView: View =
-    route.kind === 'compound'
-      ? 'compounds'
-      : route.kind === 'gene'
-      ? 'genes'
-      : route.kind === 'compoundClass'
-      ? 'compound-classes'
-      : route.kind === 'pathway'
-      ? 'pathways'
-      : route.view;
-
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center gap-3">
-            <FlaskConical className="w-8 h-8 text-blue-600" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">BioRemPP Database Explorer</h1>
-              <p className="text-sm text-gray-600 mt-1">
+              <button
+                type="button"
+                onClick={() => navigateToView('home')}
+                className="flex items-center gap-3 text-left"
+              >
+                <img
+                  src="/BIOREMPP_LOGO.png"
+                  alt="BioRemPP logo"
+                  className="w-9 h-9 rounded object-cover"
+                />
+                <h1 className="text-3xl font-bold text-gray-900">BioRemPP Database Explorer</h1>
+              </button>
+              <p className="text-sm text-gray-600 mt-1 ml-12">
                 Integrated bioremediation and toxicological data exploration
               </p>
+            </div>
+            <div className="flex items-center gap-4 text-sm text-gray-600">
+              <button type="button" onClick={() => navigateToView('database-metrics')} className="hover:text-blue-700">
+                Database Metrics
+              </button>
+              <button type="button" onClick={() => navigateToView('guided-analysis')} className="hover:text-blue-700">
+                User Guide
+              </button>
+              <button type="button" onClick={() => navigateToView('home')} className="hover:text-blue-700">
+                FAQ
+              </button>
+              <button type="button" onClick={() => navigateToView('home')} className="hover:text-blue-700">
+                Contact
+              </button>
+              <button type="button" onClick={() => navigateToView('database-metrics')} className="hover:text-blue-700">
+                Documentation
+              </button>
             </div>
           </div>
         </div>
       </header>
 
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-8">
-            <button
-              onClick={() => navigateToView('home')}
-              className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
-                activeView === 'home'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Home className="w-4 h-4" />
-              Home
-            </button>
-            <button
-              onClick={() => navigateToView('compounds')}
-              className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
-                activeView === 'compounds'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Database className="w-4 h-4" />
-              Compounds
-            </button>
-            <button
-              onClick={() => navigateToView('compound-classes')}
-              className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
-                activeView === 'compound-classes'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Layers3 className="w-4 h-4" />
-              Compound Classes
-            </button>
-            <button
-              onClick={() => navigateToView('genes')}
-              className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
-                activeView === 'genes'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Dna className="w-4 h-4" />
-              Genes / KO
-            </button>
-            <button
-              onClick={() => navigateToView('pathways')}
-              className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
-                activeView === 'pathways'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <GitBranch className="w-4 h-4" />
-              Pathways
-            </button>
-            <button
-              onClick={() => navigateToView('toxicity')}
-              className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
-                activeView === 'toxicity'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <ShieldAlert className="w-4 h-4" />
-              Toxicity
-            </button>
-            <button
-              onClick={() => navigateToView('guided-analysis')}
-              className={`flex items-center gap-2 px-3 py-4 border-b-2 font-medium text-sm transition-colors ${
-                activeView === 'guided-analysis'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              Guided Analysis
-            </button>
-          </div>
-        </div>
-      </nav>
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {route.kind === 'view' && route.view === 'home' && (
           <HomePage onNavigateToView={navigateToView} />
+        )}
+        {route.kind === 'view' && route.view === 'database-metrics' && (
+          <DatabaseMetricsPage onBack={() => navigateToView('home')} />
         )}
         {route.kind === 'view' && route.view === 'compounds' && (
           <CompoundExplorer onCompoundSelect={openCompoundDetail} />
