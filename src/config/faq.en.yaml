@@ -1,0 +1,207 @@
+﻿version: v1
+language: en
+title: Frequently Asked Questions
+intro: Find answers about BioRemPPDBX usage, reproducibility, data scope, and deployment context.
+sections:
+  - id: getting-started
+    title: Getting Started
+    items:
+      - id: what-is-bioremppdbx
+        question: What is BioRemPPDBX?
+        answer: BioRemPPDBX is a read-only explorer for integrated bioremediation and toxicology data built on SQLite, React, and a Node API.
+        bullets:
+          - It centralizes BioRemPP, KEGG, HADEG, and ToxCSM-derived structures already curated in the project.
+          - It supports exploratory analysis and hypothesis generation.
+        tags: [overview, platform]
+      - id: do-i-need-account
+        question: Do I need login or authentication?
+        answer: No. The application is currently public, read-only, and does not require account creation.
+        tags: [access, auth]
+      - id: what-can-i-open
+        question: Which modules are available in this release?
+        answer: The interface includes Database Metrics, Compounds, Compound Classes, Genes/KO, Pathways, Toxicity, and Guided Analysis.
+        links:
+          - label: Open Guided Analysis
+            url: /guided-analysis
+        tags: [navigation]
+
+  - id: file-upload-validation
+    title: File Upload & Validation
+    items:
+      - id: upload-supported
+        question: Can I upload files in BioRemPPDBX?
+        answer: Not in the current release. BioRemPPDBX is read-only and serves curated data snapshots.
+        note:
+          type: info
+          text: Upload workflows belong to the web-service track and are not part of this explorer release.
+        tags: [upload, scope]
+      - id: accepted-input-formats
+        question: What input formats are accepted for analysis?
+        answer: There is no user-input ingestion path in this build, so no file format validation is applied at runtime.
+        tags: [upload, validation]
+      - id: future-upload-roadmap
+        question: Will upload and validation be added later?
+        answer: They may be introduced in future web-service iterations, but this repository currently prioritizes reproducible precomputed exploration.
+        tags: [roadmap, upload]
+
+  - id: data-processing
+    title: Data Processing
+    items:
+      - id: how-data-is-processed
+        question: How are data prepared before appearing in the app?
+        answer: Data are preprocessed offline into a lean SQLite runtime schema, then served by SQL-first endpoints.
+        bullets:
+          - ETL normalizes IDs and builds derived read models.
+          - Runtime queries avoid heavy joins on raw wide tables.
+        tags: [etl, sql]
+      - id: guided-execution-model
+        question: How does Guided Analysis execute use cases?
+        answer: Guided use cases are declaratively defined in YAML and executed server-side through whitelisted SQL-first executors.
+        bullets:
+          - Query definitions, filters, and descriptions are config-driven.
+          - Execution metadata is returned with each run.
+        tags: [guided-analysis, yaml, sql]
+      - id: toxic-metric-policy
+        question: Are toxicity plots based on averaged synthetic scores?
+        answer: Endpoint-based toxicology use cases prioritize real endpoint values. Derived means are explicitly labeled when used in specific exploratory contexts.
+        tags: [toxicity, compliance]
+
+  - id: results-visualization
+    title: Results & Visualization
+    items:
+      - id: visualization-types
+        question: What visualization outputs are available?
+        answer: Depending on the module and use case, outputs include ranking bars, heatmaps, scatter plots, and distribution summaries with aligned tables.
+        tags: [charts, ui]
+      - id: interpretation-scope
+        question: How should I interpret chart patterns?
+        answer: Interpret outputs as exploratory signals for prioritization and hypothesis generation, not as causal proof.
+        note:
+          type: warning
+          text: Visual patterns must be validated with external evidence before confirmatory claims.
+        tags: [interpretation]
+      - id: why-empty-state
+        question: Why do some charts show empty states?
+        answer: Empty states occur when the selected filters remove all rows or when entities have no data for a required endpoint/domain.
+        tags: [charts, filters]
+
+  - id: scientific-validity-limitations
+    title: Scientific Validity & Limitations
+    items:
+      - id: prediction-limitations
+        question: Are ToxCSM values experimental measurements?
+        answer: No. They are model predictions and should be treated as computational estimates within exploratory analysis.
+        tags: [toxcsm, limitations]
+      - id: no-causal-claims
+        question: Can I claim causal mechanistic conclusions from this app alone?
+        answer: No. The platform supports exploratory interpretation and prioritization, not causal or confirmatory inference.
+        tags: [inference, limitations]
+      - id: pathway-coverage-meaning
+        question: What does pathway or KO coverage represent?
+        answer: Coverage summarizes annotated relationships in the integrated datasets and should be interpreted as annotation support, not biological completeness.
+        tags: [coverage, annotation]
+
+  - id: technical-questions
+    title: Technical Questions
+    items:
+      - id: stack-summary
+        question: Which technology stack powers BioRemPPDBX?
+        answer: Frontend uses React + Vite + TypeScript; backend uses Node/Express + SQLite read-only runtime.
+        tags: [stack]
+      - id: docker-profiles
+        question: Which container profiles are supported?
+        answer: Docker Compose supports dev, prod, and optional prod-ssl-local profiles.
+        code_example: |
+          docker compose --profile dev up --build
+          docker compose --profile prod up --build -d
+        tags: [docker, deployment]
+      - id: base-path
+        question: How does institutional subpath deployment work?
+        answer: Set BIOREMPP_URL_BASE_PATH and VITE_BIOREMPP_URL_BASE_PATH (for example /bioremppdbx/) so API routes, SPA routes, and assets resolve consistently.
+        tags: [base-path, deployment]
+
+  - id: troubleshooting
+    title: Troubleshooting
+    items:
+      - id: deep-link-404
+        question: Refreshing a deep link gives 404. What should I check?
+        answer: Confirm reverse proxy fallback for SPA routes and that base path variables are aligned between frontend build and backend runtime.
+        tags: [routing, nginx]
+      - id: navigation-stuck
+        question: Navigation stays on Home or loops paths. Why?
+        answer: This usually indicates base path duplication or malformed route composition. Validate normalized base path format as slash-wrapped prefix.
+        tags: [routing, base-path]
+      - id: missing-logo-assets
+        question: The header logo or static assets are missing.
+        answer: Verify the logo is in the static public path and that asset URLs are prefixed once by the configured base path.
+        tags: [assets, logo]
+
+  - id: data-privacy-security
+    title: Data Privacy & Security
+    items:
+      - id: user-data-storage
+        question: Does the app store personal or uploaded biological data?
+        answer: In this release, no user-uploaded datasets are collected because upload is disabled and the app serves prebuilt data only.
+        tags: [privacy]
+      - id: network-data
+        question: What data are transmitted during usage?
+        answer: Browser requests include route navigation and API queries against preloaded database content needed to render pages.
+        tags: [privacy, telemetry]
+      - id: institutional-security
+        question: How is security handled in institutional deployment?
+        answer: Typical deployment terminates TLS at institutional ingress, with internal reverse proxying to the app container.
+        tags: [security, ssl]
+
+  - id: reproducibility-versioning-citation
+    title: Reproducibility, Versioning & Citation
+    items:
+      - id: current-download-version
+        question: Which database version is currently downloadable?
+        answer: Public download currently points to BioRemPP v1.0.0 on Zenodo.
+        links:
+          - label: Zenodo record
+            url: https://zenodo.org/records/18905195
+        tags: [versioning, zenodo]
+      - id: v110-status
+        question: What is the status of BioRemPP v1.1.0?
+        answer: v1.1.0 is being finalized for stable release together with a Snakemake pipeline to support reproducible generation.
+        bullets:
+          - Planned additions include EC reaction IDs and reaction descriptions.
+          - These fields support expanded interoperability and metabolomics-oriented inference workflows.
+        tags: [v1.1.0, snakemake]
+      - id: citation-guidance
+        question: How should I cite analyses from this platform?
+        answer: Report platform version, access date, selected use case, filter context, and external dataset DOI when relevant.
+        tags: [citation, reproducibility]
+
+  - id: licensing-third-party-data
+    title: Licensing & Third-Party Data
+    items:
+      - id: third-party-sources
+        question: Which third-party resources are integrated?
+        answer: The integration references resources such as KEGG, HADEG, and ToxCSM-derived outputs under their respective terms.
+        tags: [licensing, sources]
+      - id: redistribution-policy
+        question: Does this app redefine third-party licensing terms?
+        answer: No. Users must follow the original licensing and attribution requirements of each external resource.
+        tags: [licensing, compliance]
+      - id: commercial-claims
+        question: Can outputs be used as stand-alone commercial or regulatory claims?
+        answer: No. Outputs are exploratory and should be complemented by domain-specific validation and policy requirements.
+        tags: [licensing, limitations]
+
+  - id: export-download
+    title: Export & Download
+    items:
+      - id: what-can-download
+        question: What can be downloaded from the homepage?
+        answer: The home download section links to external dataset files (SQLite and CSV snapshots) hosted on Zenodo.
+        tags: [download]
+      - id: why-external-links
+        question: Why are downloads redirected externally?
+        answer: External hosting avoids application bandwidth coupling and keeps release artifacts versioned in the official repository channel.
+        tags: [download, architecture]
+      - id: reproducible-queries
+        question: Can I reproduce guided outputs outside the app?
+        answer: Yes. Guided use cases include declarative SQL and Python query recipes that mirror the analytical outputs.
+        tags: [guided-analysis, reproducibility]

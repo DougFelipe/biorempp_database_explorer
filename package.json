@@ -7,18 +7,20 @@
     "dev": "npm run dev:full",
     "dev:web": "vite",
     "dev:full": "concurrently -n api,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "npm run compile:guided && node server/index.mjs",
+    "dev:server": "npm run compile:configs && node server/index.mjs",
     "compile:guided": "node scripts/compile-guided-config.mjs",
+    "compile:faq": "node scripts/compile-faq-config.mjs",
+    "compile:configs": "npm run compile:guided && npm run compile:faq",
     "build:web": "vite build",
     "build:server": "node --check server/index.mjs",
-    "build": "npm run compile:guided && npm run build:web && npm run build:server",
+    "build": "npm run compile:configs && npm run build:web && npm run build:server",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "ingest:sqlite": "node scripts/ingest-sqlite.mjs",
     "check:footprint": "node scripts/check-runtime-footprint.mjs",
     "ingest:data": "npm run ingest:sqlite",
-    "start": "npm run compile:guided && node server/index.mjs"
+    "start": "npm run compile:configs && node server/index.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",

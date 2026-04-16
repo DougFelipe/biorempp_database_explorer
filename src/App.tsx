@@ -4,6 +4,7 @@ import { CompoundClassExplorer } from './components/CompoundClassExplorer';
 import { CompoundDetail } from './components/CompoundDetail';
 import { CompoundClassDetail } from './components/CompoundClassDetail';
 import { DatabaseMetricsPage } from './components/DatabaseMetricsPage';
+import { FaqPage } from './components/FaqPage';
 import { GuidedAnalysisPage } from './components/GuidedAnalysisPage';
 import { GeneExplorer } from './components/GeneExplorer';
 import { GeneDetail } from './components/GeneDetail';
@@ -13,7 +14,16 @@ import { PathwayDetail } from './components/PathwayDetail';
 import { ToxicityExplorer } from './components/ToxicityExplorer';
 import { getClientBasePath, stripBasePath, withBasePath } from './utils/basePath';
 
-type View = 'home' | 'database-metrics' | 'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'guided-analysis';
+type View =
+  | 'home'
+  | 'faq'
+  | 'database-metrics'
+  | 'compounds'
+  | 'compound-classes'
+  | 'genes'
+  | 'pathways'
+  | 'toxicity'
+  | 'guided-analysis';
 type Route =
   | { kind: 'view'; view: View }
   | { kind: 'compound'; cpd: string }
@@ -23,6 +33,7 @@ type Route =
 
 const VIEW_PATHS: Record<View, string> = {
   home: '/',
+  faq: '/faq',
   'database-metrics': '/database-metrics',
   compounds: '/compounds',
   'compound-classes': '/compound-classes',
@@ -47,6 +58,9 @@ function parseRoute(pathname: string): Route {
   }
   if (path === '/compounds') {
     return { kind: 'view', view: 'compounds' };
+  }
+  if (path === '/faq') {
+    return { kind: 'view', view: 'faq' };
   }
   if (path === '/database-metrics') {
     return { kind: 'view', view: 'database-metrics' };
@@ -203,7 +217,7 @@ function App() {
               <button type="button" onClick={() => navigateToView('guided-analysis')} className="hover:text-blue-700">
                 User Guide
               </button>
-              <button type="button" onClick={() => navigateToView('home')} className="hover:text-blue-700">
+              <button type="button" onClick={() => navigateToView('faq')} className="hover:text-blue-700">
                 FAQ
               </button>
               <button type="button" onClick={() => navigateToView('home')} className="hover:text-blue-700">
@@ -220,6 +234,9 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {route.kind === 'view' && route.view === 'home' && (
           <HomePage onNavigateToView={navigateToView} />
+        )}
+        {route.kind === 'view' && route.view === 'faq' && (
+          <FaqPage onNavigateToView={navigateToView} />
         )}
         {route.kind === 'view' && route.view === 'database-metrics' && (
           <DatabaseMetricsPage onBack={() => navigateToView('home')} />
