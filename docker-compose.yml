@@ -1,0 +1,103 @@
+services:
+  bioremppdbx-dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        VITE_BIOREMPP_URL_BASE_PATH: ${VITE_BIOREMPP_URL_BASE_PATH:-/bioremppdbx/}
+    container_name: bioremppdbx-dev
+    environment:
+      PORT: ${DEV_API_PORT:-3101}
+      SQLITE_DB_PATH: /app/data/biorempp.sqlite
+      BIOREMPP_URL_BASE_PATH: ${BIOREMPP_URL_BASE_PATH:-/bioremppdbx/}
+      VITE_BIOREMPP_URL_BASE_PATH: ${VITE_BIOREMPP_URL_BASE_PATH:-/bioremppdbx/}
+      VITE_DEV_API_ORIGIN: http://127.0.0.1:${DEV_API_PORT:-3101}
+    ports:
+      - "${DEV_WEB_PORT:-5173}:5173"
+      - "${DEV_API_PORT:-3101}:3101"
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  bioremppdbx:
+    profiles: ["prod", "prod-ssl-local"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        VITE_BIOREMPP_URL_BASE_PATH: ${VITE_BIOREMPP_URL_BASE_PATH:-/bioremppdbx/}
+    container_name: bioremppdbx
+    environment:
+      PORT: ${PORT:-3000}
+      SQLITE_DB_PATH: /app/data/biorempp.sqlite
+      BIOREMPP_URL_BASE_PATH: ${BIOREMPP_URL_BASE_PATH:-/bioremppdbx/}
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  bioremppdbx-nginx:
+    profiles: ["prod"]
+    image: nginx:1.27-alpine
+    container_name: bioremppdbx-nginx
+    environment:
+      APP_UPSTREAM: bioremppdbx:3000
+      BIOREMPP_URL_BASE_PATH: ${BIOREMPP_URL_BASE_PATH:-/bioremppdbx/}
+      BIOREMPP_URL_BASE_PATH_NO_TRAILING: ${BIOREMPP_URL_BASE_PATH_NO_TRAILING:-/bioremppdbx}
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./.docker/nginx/nginx.prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      bioremppdbx:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  bioremppdbx-nginx-ssl-local:
+    profiles: ["prod-ssl-local"]
+    image: nginx:1.27-alpine
+    container_name: bioremppdbx-nginx-ssl-local
+    environment:
+      APP_UPSTREAM: bioremppdbx:3000
+      BIOREMPP_URL_BASE_PATH: ${BIOREMPP_URL_BASE_PATH:-/bioremppdbx/}
+      BIOREMPP_URL_BASE_PATH_NO_TRAILING: ${BIOREMPP_URL_BASE_PATH_NO_TRAILING:-/bioremppdbx}
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "${HTTP_MOCK_PORT:-8081}:80"
+      - "${HTTPS_MOCK_PORT:-8443}:443"
+    volumes:
+      - ./.docker/nginx/nginx.prod.tls-local.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${SSL_CERT_PATH:-./.docker/certs/biorempp-local.crt}:/etc/nginx/certs/server.crt:ro
+      - ${SSL_KEY_PATH:-./.docker/certs/biorempp-local.key}:/etc/nginx/certs/server.key:ro
+    depends_on:
+      bioremppdbx:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate --quiet --tries=1 --spider https://127.0.0.1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
