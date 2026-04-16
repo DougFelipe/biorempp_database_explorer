@@ -2,7 +2,7 @@ Docker Compose - Guia rapido para TI (BioRemPPDBX)
 
 Stack oficial deste projeto
 - Frontend: React + Vite + TypeScript
-- Backend: Node/Express (monolito com API + SPA)
+- Backend: Node/Express
 - Banco: SQLite read-only em runtime
 - Servico principal: bioremppdbx
 - Proxy (prod): bioremppdbx-nginx
