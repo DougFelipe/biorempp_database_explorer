@@ -24,5 +24,21 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
     },
+  },
+  // Test file overrides
+  {
+    files: ['**/*.{test,spec}.{ts,tsx}', 'vitest.setup.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        // Vitest globals (compatible with Jest's API)
+        ...globals.jest,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      'no-console': 'off',
+    },
   }
 );
