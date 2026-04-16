@@ -22,7 +22,9 @@ dist-ssr
 *.sln
 *.sw?
 .env
-.archive
+.archive/*
+!.archive/codex_tests/
+!.archive/codex_tests/**
 data/biorempp.sqlite
 data/biorempp.sqlite-shm
 data/biorempp.sqlite-wal
