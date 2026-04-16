@@ -1,10 +1,10 @@
-import executiveSummaryRaw from '../data/databases_metadatas/executive_summary.json?raw';
-import basicStatisticsRaw from '../data/databases_metadatas/basic_statistics.json?raw';
-import databaseMetadataRaw from '../data/databases_metadatas/database_metadata.json?raw';
-import compoundStatisticsRaw from '../data/databases_metadatas/compound_statistics.json?raw';
-import geneStatisticsRaw from '../data/databases_metadatas/gene_statistics.json?raw';
-import koStatisticsRaw from '../data/databases_metadatas/ko_statistics.json?raw';
-import enzymeStatisticsRaw from '../data/databases_metadatas/enzyme_statistics.json?raw';
+import executiveSummaryRaw from '../../data/databases_metadatas/executive_summary.json?raw';
+import basicStatisticsRaw from '../../data/databases_metadatas/basic_statistics.json?raw';
+import databaseMetadataRaw from '../../data/databases_metadatas/database_metadata.json?raw';
+import compoundStatisticsRaw from '../../data/databases_metadatas/compound_statistics.json?raw';
+import geneStatisticsRaw from '../../data/databases_metadatas/gene_statistics.json?raw';
+import koStatisticsRaw from '../../data/databases_metadatas/ko_statistics.json?raw';
+import enzymeStatisticsRaw from '../../data/databases_metadatas/enzyme_statistics.json?raw';
 import type {
   ColumnCompletenessItem,
   DatabaseMetricsCatalog,
@@ -73,7 +73,7 @@ function buildSchemaSnapshots(): DatabaseSchemaSnapshot[] {
       columns: 8,
       focus: 'Compound-gene-enzyme-agency relationships for bioremediation',
       join_key: 'ko (primary integration key)',
-      source_doc: 'src/data/database_schemas/biorempp-schema.md',
+      source_doc: 'data/database_schemas/biorempp-schema.md',
       core_columns: ['ko', 'cpd', 'referenceAG', 'compoundclass', 'compoundname', 'genesymbol', 'genename', 'enzyme_activity'],
     },
     {
@@ -84,7 +84,7 @@ function buildSchemaSnapshots(): DatabaseSchemaSnapshot[] {
       columns: 4,
       focus: 'Hydrocarbon aerobic degradation gene-pathway relationships',
       join_key: 'ko',
-      source_doc: 'src/data/database_schemas/hadeg-schema.md',
+      source_doc: 'data/database_schemas/hadeg-schema.md',
       core_columns: ['Gene', 'ko', 'Pathway', 'compound_pathway'],
     },
     {
@@ -95,7 +95,7 @@ function buildSchemaSnapshots(): DatabaseSchemaSnapshot[] {
       columns: 3,
       focus: 'Xenobiotic/pollutant degradation pathways',
       join_key: 'ko',
-      source_doc: 'src/data/database_schemas/kegg-schema.md',
+      source_doc: 'data/database_schemas/kegg-schema.md',
       core_columns: ['ko', 'pathname', 'genesymbol'],
     },
     {
@@ -106,7 +106,7 @@ function buildSchemaSnapshots(): DatabaseSchemaSnapshot[] {
       columns: 66,
       focus: 'Toxicological predictions across 31 endpoints',
       join_key: 'cpd (compound key)',
-      source_doc: 'src/data/database_schemas/toxcsm-schema.md',
+      source_doc: 'data/database_schemas/toxcsm-schema.md',
       core_columns: ['SMILES', 'cpd', 'ChEBI', 'compoundname', '31 label_*', '31 value_*'],
     },
   ];

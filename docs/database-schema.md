@@ -8,7 +8,7 @@
 
 ## Visão Geral
 
-O banco é um SQLite somente-leitura em tempo de execução, construído a partir de quatro arquivos CSV localizados em `src/data/`. Ele consolida dados de biorremediação (compostos, genes/KOs, vias metabólicas) com predições de toxicidade de 31 endpoints. A ingestão valida, normaliza e cruza os dados antes de gravá-los, garantindo que cada tabela seja derivável e consistente com as fontes originais.
+O banco é um SQLite somente-leitura em tempo de execução, construído a partir de quatro arquivos CSV localizados em `data/raw/`. Ele consolida dados de biorremediação (compostos, genes/KOs, vias metabólicas) com predições de toxicidade de 31 endpoints. A ingestão valida, normaliza e cruza os dados antes de gravá-los, garantindo que cada tabela seja derivável e consistente com as fontes originais.
 
 ### Fontes de dados
 
@@ -414,3 +414,4 @@ Os índices cobrem:
 - Colunas de ordenação (`relation_count_total`, `compound_count`, `value`).
 
 Não há índices em `updated_at` (nunca filtrado) nem em colunas JSON (não suportado nativamente).
+

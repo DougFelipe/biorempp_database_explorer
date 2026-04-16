@@ -9,7 +9,7 @@ const CPD_PATTERN = /^C\d{5}$/;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
-const dataDir = path.join(projectRoot, 'src', 'data');
+const dataDir = path.join(projectRoot, 'data', 'raw');
 const defaultDbPath = path.join(projectRoot, 'data', 'biorempp.sqlite');
 const DATASET_FILES = {
   biorempp: 'biorempp_database_v1.1.0.csv',
