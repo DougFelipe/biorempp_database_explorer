@@ -29,6 +29,21 @@ import type {
   GuidedExecutionResponse,
   GuidedQueryOptionsResponse,
 } from '../types/guided';
+import { getClientBasePath, withBasePath } from '../utils/basePath';
+
+const CLIENT_BASE_PATH = getClientBasePath();
+const API_BASE_PATH = withBasePath('/api', CLIENT_BASE_PATH);
+
+function apiUrl(path: string) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (normalizedPath === '/api') {
+    return API_BASE_PATH;
+  }
+  if (normalizedPath.startsWith('/api/')) {
+    return `${API_BASE_PATH}${normalizedPath.slice('/api'.length)}`;
+  }
+  return withBasePath(normalizedPath, CLIENT_BASE_PATH);
+}
 
 function buildQuery(params: Record<string, unknown>) {
   const searchParams = new URLSearchParams();
@@ -43,7 +58,7 @@ function buildQuery(params: Record<string, unknown>) {
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+  const response = await fetch(apiUrl(url));
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || `Request failed: ${response.status}`);
@@ -261,7 +276,7 @@ export async function executeGuidedQuery(
   queryId: string,
   payload: GuidedExecuteRequest = {}
 ): Promise<GuidedExecutionResponse> {
-  const response = await fetch(`/api/guided/queries/${encodeURIComponent(queryId)}/execute`, {
+  const response = await fetch(apiUrl(`/api/guided/queries/${encodeURIComponent(queryId)}/execute`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

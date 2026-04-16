@@ -11,6 +11,7 @@ import { HomePage } from './components/HomePage';
 import { PathwayExplorer } from './components/PathwayExplorer';
 import { PathwayDetail } from './components/PathwayDetail';
 import { ToxicityExplorer } from './components/ToxicityExplorer';
+import { getClientBasePath, stripBasePath, withBasePath } from './utils/basePath';
 
 type View = 'home' | 'database-metrics' | 'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'guided-analysis';
 type Route =
@@ -31,13 +32,15 @@ const VIEW_PATHS: Record<View, string> = {
   'guided-analysis': '/guided-analysis',
 };
 
+const CLIENT_BASE_PATH = getClientBasePath();
+
 function normalizePath(pathname: string) {
   const cleaned = pathname.replace(/\/+$/, '');
   return cleaned || '/';
 }
 
 function parseRoute(pathname: string): Route {
-  const path = normalizePath(pathname);
+  const path = normalizePath(stripBasePath(pathname, CLIENT_BASE_PATH));
 
   if (path === '/' || path === '/home') {
     return { kind: 'view', view: 'home' };
@@ -122,15 +125,15 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const path = normalizePath(window.location.pathname);
+    const path = normalizePath(stripBasePath(window.location.pathname, CLIENT_BASE_PATH));
     if (path === '/visualizations') {
-      window.history.replaceState(null, '', '/guided-analysis');
+      window.history.replaceState(null, '', withBasePath('/guided-analysis', CLIENT_BASE_PATH));
       setRoute({ kind: 'view', view: 'guided-analysis' });
     }
   }, []);
 
   function navigate(path: string, replace = false) {
-    const target = normalizePath(path);
+    const target = normalizePath(withBasePath(path, CLIENT_BASE_PATH));
     const current = normalizePath(window.location.pathname);
 
     if (target !== current) {
@@ -183,7 +186,7 @@ function App() {
                 className="flex items-center gap-3 text-left"
               >
                 <img
-                  src="/BIOREMPP_LOGO.png"
+                  src={withBasePath('/BIOREMPP_LOGO.png', CLIENT_BASE_PATH)}
                   alt="BioRemPP logo"
                   className="w-9 h-9 rounded object-cover"
                 />

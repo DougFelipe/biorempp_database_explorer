@@ -9,8 +9,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 
+function normalizeBasePath(value) {
+  const raw = String(value || '/').trim();
+  if (!raw || raw === '/') {
+    return '/';
+  }
+  const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+  return `/${withLeadingSlash.replace(/^\/+|\/+$/g, '')}/`;
+}
+
 const PORT = Number(process.env.PORT || (process.env.NODE_ENV === 'production' ? 3000 : 3101));
 const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH || path.join(projectRoot, 'data', 'biorempp.sqlite');
+const BASE_PATH = normalizeBasePath(process.env.BIOREMPP_URL_BASE_PATH || '/');
 
 if (!fs.existsSync(SQLITE_DB_PATH)) {
   throw new Error(`SQLite database not found at ${SQLITE_DB_PATH}. Run "npm run ingest:sqlite" first.`);
@@ -64,6 +74,7 @@ const hasCompoundMetadataTable = Boolean(
     .get()
 );
 
+const rootApp = express();
 const app = express();
 app.use(express.json());
 
@@ -2182,7 +2193,7 @@ app.get('/api/meta/toxicity/labels', (req, res, next) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, basePath: BASE_PATH });
 });
 
 const distPath = path.join(projectRoot, 'dist');
@@ -2201,7 +2212,20 @@ app.use((error, _req, res, _next) => {
   });
 });
 
-app.listen(PORT, () => {
+rootApp.get('/health', (_req, res) => {
+  res.json({ ok: true, basePath: BASE_PATH });
+});
+
+if (BASE_PATH !== '/' && process.env.NODE_ENV === 'production') {
+  rootApp.get('/', (_req, res) => {
+    res.redirect(302, BASE_PATH);
+  });
+}
+
+rootApp.use(BASE_PATH, app);
+
+rootApp.listen(PORT, () => {
   console.log(`BioRemPP monolith listening on http://0.0.0.0:${PORT}`);
+  console.log(`Base path: ${BASE_PATH}`);
   console.log(`SQLite DB: ${SQLITE_DB_PATH}`);
 });
