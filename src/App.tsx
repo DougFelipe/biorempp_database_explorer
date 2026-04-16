@@ -5,6 +5,7 @@ import { CompoundDetail } from './components/CompoundDetail';
 import { CompoundClassDetail } from './components/CompoundClassDetail';
 import { DatabaseMetricsPage } from './components/DatabaseMetricsPage';
 import { FaqPage } from './components/FaqPage';
+import { ContactPage } from './components/ContactPage';
 import { GuidedAnalysisPage } from './components/GuidedAnalysisPage';
 import { GeneExplorer } from './components/GeneExplorer';
 import { GeneDetail } from './components/GeneDetail';
@@ -17,6 +18,7 @@ import { getClientBasePath, stripBasePath, withBasePath } from './utils/basePath
 type View =
   | 'home'
   | 'faq'
+  | 'contact'
   | 'database-metrics'
   | 'compounds'
   | 'compound-classes'
@@ -34,6 +36,7 @@ type Route =
 const VIEW_PATHS: Record<View, string> = {
   home: '/',
   faq: '/faq',
+  contact: '/contact',
   'database-metrics': '/database-metrics',
   compounds: '/compounds',
   'compound-classes': '/compound-classes',
@@ -61,6 +64,9 @@ function parseRoute(pathname: string): Route {
   }
   if (path === '/faq') {
     return { kind: 'view', view: 'faq' };
+  }
+  if (path === '/contact') {
+    return { kind: 'view', view: 'contact' };
   }
   if (path === '/database-metrics') {
     return { kind: 'view', view: 'database-metrics' };
@@ -220,7 +226,7 @@ function App() {
               <button type="button" onClick={() => navigateToView('faq')} className="hover:text-blue-700">
                 FAQ
               </button>
-              <button type="button" onClick={() => navigateToView('home')} className="hover:text-blue-700">
+              <button type="button" onClick={() => navigateToView('contact')} className="hover:text-blue-700">
                 Contact
               </button>
               <button type="button" onClick={() => navigateToView('database-metrics')} className="hover:text-blue-700">
@@ -238,6 +244,7 @@ function App() {
         {route.kind === 'view' && route.view === 'faq' && (
           <FaqPage onNavigateToView={navigateToView} />
         )}
+        {route.kind === 'view' && route.view === 'contact' && <ContactPage />}
         {route.kind === 'view' && route.view === 'database-metrics' && (
           <DatabaseMetricsPage onBack={() => navigateToView('home')} />
         )}

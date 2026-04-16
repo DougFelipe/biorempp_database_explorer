@@ -1,0 +1,54 @@
+version: v1
+language: en
+page_title: Help & Contact
+page_subtitle: Learn more about our team and get in touch with us
+
+laboratory:
+  section_title: Our Laboratory
+  card_title: About LBMG
+  name: Laboratory of Molecular Biology and Genomics (LBMG)
+  logo_image_key: lbmg_logo
+  paragraphs:
+    - The Laboratory of Molecular Biology and Genomics (LBMG) at the Federal University of Rio Grande do Norte (UFRN) began its work in 1996 with the establishment of the research base in Genetics and Molecular Biology.
+    - In 2003, under the coordination of Professors Lucymara Fassarella Agnez-Lima and Silvia Regina Batistuzzo de Medeiros, a new laboratory was inaugurated, expanding its facilities.
+    - The lab is affiliated with the Department of Cell Biology and Genetics at the Biosciences Center of UFRN. Today, LBMG brings together approximately 70 undergraduate, master's, and doctoral students.
+
+team:
+  section_title: Meet the Team
+  members:
+    - id: douglas-felipe
+      name: Douglas Felipe
+      role: Biomedical Scientist, MSc. in Bioinformatics
+      image_key: developer
+      description: PhD student in Bioinformatics at UFRN, specializing in biotechnological solutions using microbiology to mitigate environmental pollution through bioremediation. Expertise in molecular biology, microbiology, bioinformatics, and software engineering with focus on data science, artificial intelligence, and computational intelligence for integrated data science and machine learning workflows.
+      additional_info: BioRemPP Developer
+    - id: lucymara-agnez-lima
+      name: Dr. Lucymara Fassarella Agnez-Lima
+      role: Full Professor
+      image_key: supervisor
+      badge_text: CNPq Research Fellow
+      description: Full Professor at the Federal University of Rio Grande do Norte (UFRN). Holds a BSc in Biological Sciences from the Federal University of Espírito Santo, MSc and PhD in Biological Sciences (Biology/Genetics) from the University of São Paulo, and postdoctoral fellowship from the University of Barcelona. Permanent advisor in graduate programs in Biochemistry, RENORBIO, and Bioinformatics, with research focused on genetics, molecular biology, biotechnology, and environmental genomics.
+      additional_info: Department of Cell Biology and Genetics - UFRN
+
+get_in_touch:
+  section_title: Get in Touch
+  intro: Feel free to reach out via email for collaboration or inquiries
+  email: biorempp@gmail.com
+  social_title: Connect on Social Media
+  social_links:
+    - id: github
+      label: GitHub - BioRemPP
+      icon: github
+      url: https://github.com/BioRemPP
+    - id: linkedin
+      label: LinkedIn - Douglas Felipe
+      icon: linkedin
+      url: https://www.linkedin.com/in/douglas-feliipe/
+    - id: instagram
+      label: Instagram - @pesquisadoug
+      icon: instagram
+      url: https://www.instagram.com/pesquisadoug/
+    - id: email
+      label: Email - biorempp@gmail.com
+      icon: email
+      url: mailto:biorempp@gmail.com
