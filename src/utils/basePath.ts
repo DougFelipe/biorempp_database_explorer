@@ -24,11 +24,20 @@ export function stripBasePath(pathname: string, basePath: string) {
   if (normalizedPath === withoutTrailing || normalizedPath === normalizedBasePath) {
     return '/';
   }
-  if (normalizedPath.startsWith(normalizedBasePath)) {
-    const stripped = normalizedPath.slice(normalizedBasePath.length - 1);
-    return stripped || '/';
+
+  let strippedPath = normalizedPath;
+  while (strippedPath.startsWith(normalizedBasePath)) {
+    const next = strippedPath.slice(normalizedBasePath.length - 1) || '/';
+    if (next === strippedPath) {
+      break;
+    }
+    strippedPath = ensureLeadingSlash(next);
+    if (strippedPath === withoutTrailing || strippedPath === normalizedBasePath) {
+      return '/';
+    }
   }
-  return normalizedPath;
+
+  return strippedPath;
 }
 
 export function withBasePath(pathname: string, basePath: string) {
@@ -39,16 +48,13 @@ export function withBasePath(pathname: string, basePath: string) {
     return normalizedPath;
   }
 
+  const withoutBasePrefix = stripBasePath(normalizedPath, normalizedBasePath);
   const withoutTrailing = normalizedBasePath.replace(/\/$/, '');
-  if (normalizedPath === withoutTrailing || normalizedPath.startsWith(normalizedBasePath)) {
-    return normalizedPath;
-  }
-
-  if (normalizedPath === '/') {
+  if (withoutBasePrefix === '/') {
     return normalizedBasePath;
   }
 
-  return `${withoutTrailing}${normalizedPath}`;
+  return `${withoutTrailing}${withoutBasePrefix}`;
 }
 
 export function getClientBasePath() {
