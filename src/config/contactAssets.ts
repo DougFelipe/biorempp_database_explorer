@@ -1,11 +1,11 @@
-import developerImage from '../../data/assets/developer.jpeg';
-import lbmgLogoImage from '../../data/assets/lbmg_logo.png';
-import supervisorImage from '../../data/assets/supervisor.png';
+import { getClientBasePath, withBasePath } from '../utils/basePath';
+
+const CLIENT_BASE_PATH = getClientBasePath();
 
 export const CONTACT_IMAGE_ASSETS = {
-  lbmg_logo: lbmgLogoImage,
-  developer: developerImage,
-  supervisor: supervisorImage,
+  lbmg_logo: withBasePath('/lbmg_logo.png', CLIENT_BASE_PATH),
+  developer: withBasePath('/developer.jpeg', CLIENT_BASE_PATH),
+  supervisor: withBasePath('/supervisor.png', CLIENT_BASE_PATH),
 } as const;
 
 export type ContactImageKey = keyof typeof CONTACT_IMAGE_ASSETS;
