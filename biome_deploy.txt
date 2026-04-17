@@ -1,0 +1,28 @@
+Docker Compose
+
+### Stack oficial deste projeto
+- Frontend: React + Vite + TypeScript
+- Backend: Node/Express
+- Banco: SQLite read-only em runtime
+- Servico principal: bioremppdbx
+- Proxy (prod): bioremppdbx-nginx
+
+### Importante: subpath institucional
+- Variavel canonica: BIOREMPP_URL_BASE_PATH
+- Valor alvo institucional: /bioremppdbx/
+
+### Ambiente de producao (HTTP + Nginx)
+
+Subir limpo:
+docker compose --profile prod down --remove-orphans
+docker compose --profile prod up -d --build
+
+Containers esperados:
+- bioremppdbx (healthy)
+- bioremppdbx-nginx (healthy)
+
+Parar:
+docker compose --profile prod down --remove-orphans
+
+Se houver erro de container legado:
+- Rodar down com --remove-orphans para limpar servicos antigos renomeados.
