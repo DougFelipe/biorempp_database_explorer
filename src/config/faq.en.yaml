@@ -11,6 +11,7 @@ sections:
         answer: BioRemPPDBX is a read-only explorer for integrated bioremediation and toxicology data built on SQLite, React, and a Node API.
         bullets:
           - It centralizes BioRemPP, KEGG, HADEG, and ToxCSM-derived structures already curated in the project.
+          - It focuses on annotated pollutant and xenobiotic relationships relevant to environmental bioremediation context.
           - It supports exploratory analysis and hypothesis generation.
         tags: [overview, platform]
       - id: do-i-need-account
@@ -24,6 +25,13 @@ sections:
           - label: Open Guided Analysis
             url: /guided-analysis
         tags: [navigation]
+      - id: dbx-vs-web-service
+        question: What is the difference between DBX and the BioRemPP Web Service?
+        answer: DBX is designed for curated database exploration and reproducible query-based inspection, while the BioRemPP Web Service focuses on user-data analytical workflows.
+        bullets:
+          - DBX emphasizes read-only integrated records, guided exploratory use cases, and reproducible SQL/Python recipes.
+          - The Web Service track includes user-facing analytical processes that are outside DBX runtime scope.
+        tags: [dbx, web-service, scope]
 
   - id: file-upload-validation
     title: File Upload & Validation
@@ -61,6 +69,20 @@ sections:
           - Query definitions, filters, and descriptions are config-driven.
           - Execution metadata is returned with each run.
         tags: [guided-analysis, yaml, sql]
+      - id: data-provenance-curation
+        question: How is data provenance and curation handled in DBX?
+        answer: DBX integrates curated structures from BioRemPP, KEGG, HADEG, ToxCSM, and agency-related annotations through a controlled ETL workflow.
+        bullets:
+          - Identifier normalization and linkage checks are performed before runtime delivery.
+          - Automated transformations are combined with project curation rules and versioned release snapshots.
+        tags: [provenance, curation, etl]
+      - id: integration-model
+        question: How are compounds, genes/KOs, pathways, and toxicity endpoints integrated?
+        answer: The integration model is compound-centric, linking compounds to KO/gene mappings, pathway annotations, and endpoint-level toxicity predictions through normalized keys.
+        bullets:
+          - KO and gene mappings connect functional and pathway contexts.
+          - Toxicity endpoints remain endpoint-level signals and are interpreted in exploratory analytical context.
+        tags: [integration, compound-centric, mapping]
       - id: toxic-metric-policy
         question: Are toxicity plots based on averaged synthetic scores?
         answer: Endpoint-based toxicology use cases prioritize real endpoint values. Derived means are explicitly labeled when used in specific exploratory contexts.
@@ -84,6 +106,13 @@ sections:
         question: Why do some charts show empty states?
         answer: Empty states occur when the selected filters remove all rows or when entities have no data for a required endpoint/domain.
         tags: [charts, filters]
+      - id: use-cases-and-workflows
+        question: What scientific questions and workflows can I run in practice?
+        answer: DBX supports exploratory workflows such as ranking bioremediation potential, inspecting regulatory annotations, mapping pathway coverage, and relating toxicity context to compounds or genes.
+        bullets:
+          - Start from Guided Analysis to select a use case and apply filters.
+          - Inspect chart + table outputs together, then export/reproduce with SQL or Python recipes.
+        tags: [use-cases, workflows, guided-analysis]
 
   - id: scientific-validity-limitations
     title: Scientific Validity & Limitations
@@ -108,6 +137,30 @@ sections:
         question: Which technology stack powers BioRemPPDBX?
         answer: Frontend uses React + Vite + TypeScript; backend uses Node/Express + SQLite read-only runtime.
         tags: [stack]
+      - id: database-schema-summary
+        question: What is the structure of the underlying database?
+        answer: The runtime uses a lean relational SQLite schema with summary and mapping tables for compounds, genes/KOs, pathways, toxicity endpoints, and guided analytical relations.
+        bullets:
+          - Core link keys are normalized identifiers such as C-numbers (compounds) and K-numbers (KOs).
+          - Database Metrics documents table-level snapshots and schema references for release context.
+        tags: [schema, sqlite, tables]
+      - id: api-programmatic-access
+        question: Can I programmatically access DBX data?
+        answer: Yes. DBX exposes read-only API routes under /api for explorers, metadata, and guided execution.
+        bullets:
+          - Example endpoints include /api/compounds, /api/pathways, /api/toxicity, and /api/guided/*.
+          - API contracts may evolve across releases; pin version context for reproducible automation.
+        code_example: |
+          curl http://localhost:3101/api/compounds?page=1&pageSize=10
+          curl http://localhost:3101/api/guided/catalog
+        tags: [api, programmatic-access]
+      - id: performance-limits
+        question: Are there practical performance limitations?
+        answer: Yes. Performance depends on browser resources, selected filters, and deployment profile (local/dev/institutional prod).
+        bullets:
+          - Prefer scoped filters for large matrix views.
+          - Use production profile with reverse proxy and base-path configuration for institutional deployments.
+        tags: [performance, deployment]
       - id: docker-profiles
         question: Which container profiles are supported?
         answer: Docker Compose supports dev, prod, and optional prod-ssl-local profiles.
@@ -171,8 +224,11 @@ sections:
         tags: [v1.1.0, snakemake]
       - id: citation-guidance
         question: How should I cite analyses from this platform?
-        answer: Report platform version, access date, selected use case, filter context, and external dataset DOI when relevant.
-        tags: [citation, reproducibility]
+        answer: Report platform version, access date, selected use case, filter context, and external dataset DOI when relevant. For FAIR alignment, include machine-readable format references (SQLite/CSV), schema documentation, and reproducible query context.
+        bullets:
+          - FAIR alignment in DBX is operational and partial, based on findability, accessibility, interoperability, and reuse-oriented documentation.
+          - Interoperability is supported through SQLite/CSV artifacts and companion SQL/Python recipes.
+        tags: [citation, reproducibility, fair, interoperability]
 
   - id: licensing-third-party-data
     title: Licensing & Third-Party Data
