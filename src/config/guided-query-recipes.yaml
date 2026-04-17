@@ -1,5 +1,5 @@
 version: v1
-note: Query recipes are static examples for reproducibility and do not reflect active UI filters.
+note: Query recipes are static full-scope reproducibility examples and do not automatically reflect active UI filters.
 queries:
   uc1_top_bioremediation_compounds:
     button_label: View Queries
@@ -7,7 +7,7 @@ queries:
     introduction: Reproduce the ranking used in UC-1 using the same canonical compound_summary table.
     sqlite:
       description: Top compounds by KO count with deterministic tie-break.
-      query: |
+      query: |-
         SELECT
           cpd,
           compoundname,
@@ -17,10 +17,11 @@ queries:
           pathway_count
         FROM compound_summary
         ORDER BY ko_count DESC, cpd ASC
-        LIMIT 10;
+        ;
     python:
       description: Python sqlite3 script to run the same ranking query.
-      script: |
+      script: |-
+        import json
         import sqlite3
 
         db_path = "data/biorempp.sqlite"
@@ -34,29 +35,29 @@ queries:
           pathway_count
         FROM compound_summary
         ORDER BY ko_count DESC, cpd ASC
-        LIMIT 10;
+        ;
         """
 
         with sqlite3.connect(db_path) as conn:
-          rows = conn.execute(query).fetchall()
-          for row in rows:
-            print(row)
+          conn.row_factory = sqlite3.Row
+          rows = [dict(row) for row in conn.execute(query).fetchall()]
+
+        print(json.dumps({"rows": rows}, ensure_ascii=False, sort_keys=True))
     notes:
       - This recipe is exploratory and should be interpreted as annotation-based prioritization.
-
   uc2_most_toxic_compounds:
     button_label: View Queries
     title: UC-2 Query Recipes (Most Toxic Compounds)
     introduction: Reproduce UC-2 ranking using only real endpoint prediction values (single endpoint or endpoint-group peak).
     sqlite:
       description: Parameterized ranking based on endpoint values from toxicity_endpoint (no mean aggregation).
-      query: |
+      query: |-
         WITH params AS (
           -- risk_mode: 'endpoint' or 'group_peak'
           -- endpoint_group: 'all', 'ecotoxicity', 'genotoxicity_carcinogenicity', 'nuclear_receptors', 'stress_response', 'organ_irritation', 'other'
           SELECT
-            'group_peak' AS risk_mode,
-            'ecotoxicity' AS endpoint_group,
+            'endpoint' AS risk_mode,
+            'all' AS endpoint_group,
             'avian' AS endpoint
         ),
         endpoint_scoped AS (
@@ -154,18 +155,21 @@ queries:
         FROM metric
         WHERE y_value IS NOT NULL
         ORDER BY y_value DESC, gene_count DESC, cpd ASC
-        LIMIT 10;
+        ;
     python:
       description: Python sqlite3 script for UC-2 with selectable mode and endpoint context.
-      script: |
+      script: |-
+        import json
         import sqlite3
 
         db_path = "data/biorempp.sqlite"
         query = """
         WITH params AS (
+          -- risk_mode: 'endpoint' or 'group_peak'
+          -- endpoint_group: 'all', 'ecotoxicity', 'genotoxicity_carcinogenicity', 'nuclear_receptors', 'stress_response', 'organ_irritation', 'other'
           SELECT
-            'group_peak' AS risk_mode,
-            'ecotoxicity' AS endpoint_group,
+            'endpoint' AS risk_mode,
+            'all' AS endpoint_group,
             'avian' AS endpoint
         ),
         endpoint_scoped AS (
@@ -263,25 +267,24 @@ queries:
         FROM metric
         WHERE y_value IS NOT NULL
         ORDER BY y_value DESC, gene_count DESC, cpd ASC
-        LIMIT 10;
+        ;
         """
 
         with sqlite3.connect(db_path) as conn:
-          rows = conn.execute(query).fetchall()
-          print("rows:", len(rows))
-          for row in rows:
-            print(row)
+          conn.row_factory = sqlite3.Row
+          rows = [dict(row) for row in conn.execute(query).fetchall()]
+
+        print(json.dumps({"rows": rows}, ensure_ascii=False, sort_keys=True))
     notes:
       - This UC uses only real endpoint values from toxicity_endpoint.
       - Group mode uses peak endpoint value (MAX) and not mean aggregation.
-
   uc4_regulated_by_agency:
     button_label: View Queries
     title: UC-4 Query Recipes (Regulated Compounds by Agency)
     introduction: Reproduce UC-4 filtering and ranking by agency references from compound_reference_map, keeping each IARC class independent.
     sqlite:
       description: Agency-filtered ranking with dynamic agency list from the database (no hardcoded subset).
-      query: |
+      query: |-
         WITH params AS (
           -- reference_ag: 'all' or one exact value from compound_reference_map.reference_ag
           SELECT 'all' AS reference_ag
@@ -301,6 +304,7 @@ queries:
             cs.compoundname,
             cs.compoundclass,
             cs.reference_count,
+            cs.ko_count,
             cs.gene_count,
             cs.pathway_count,
             crm.reference_ag
@@ -315,6 +319,7 @@ queries:
           compoundname,
           compoundclass,
           reference_count,
+          ko_count,
           gene_count,
           pathway_count,
           GROUP_CONCAT(DISTINCT reference_ag) AS matched_references
@@ -324,18 +329,21 @@ queries:
           compoundname,
           compoundclass,
           reference_count,
+          ko_count,
           gene_count,
           pathway_count
         ORDER BY reference_count DESC, cpd ASC
-        LIMIT 10;
+        ;
     python:
       description: Python sqlite3 script for UC-4 with dynamic agency list and independent IARC labels.
-      script: |
+      script: |-
+        import json
         import sqlite3
 
         db_path = "data/biorempp.sqlite"
         query = """
         WITH params AS (
+          -- reference_ag: 'all' or one exact value from compound_reference_map.reference_ag
           SELECT 'all' AS reference_ag
         ),
         agency_scope AS (
@@ -353,6 +361,7 @@ queries:
             cs.compoundname,
             cs.compoundclass,
             cs.reference_count,
+            cs.ko_count,
             cs.gene_count,
             cs.pathway_count,
             crm.reference_ag
@@ -367,6 +376,7 @@ queries:
           compoundname,
           compoundclass,
           reference_count,
+          ko_count,
           gene_count,
           pathway_count,
           GROUP_CONCAT(DISTINCT reference_ag) AS matched_references
@@ -376,28 +386,28 @@ queries:
           compoundname,
           compoundclass,
           reference_count,
+          ko_count,
           gene_count,
           pathway_count
         ORDER BY reference_count DESC, cpd ASC
-        LIMIT 10;
+        ;
         """
 
         with sqlite3.connect(db_path) as conn:
-          rows = conn.execute(query).fetchall()
-          print("rows:", len(rows))
-          for row in rows:
-            print(row)
+          conn.row_factory = sqlite3.Row
+          rows = [dict(row) for row in conn.execute(query).fetchall()]
+
+        print(json.dumps({"rows": rows}, ensure_ascii=False, sort_keys=True))
     notes:
       - IARC labels remain separated (IARC1, IARC2A, IARC2B).
       - This query is for exploratory regulatory relevance and not a regulatory decision engine.
-
   uc5_pathways_functional_coverage:
     button_label: View Queries
     title: UC-5 Query Recipes (Pathways Functional Coverage)
     introduction: Reproduce UC-5 pathway ranking by distinct KO coverage from the deduplicated relation table.
     sqlite:
       description: Pathway ranking by COUNT(DISTINCT ko), with optional source filter.
-      query: |
+      query: |-
         WITH params AS (
           -- source: 'all' | 'KEGG' | 'HADEG' | 'COMPOUND_PATHWAY'
           SELECT 'all' AS source
@@ -418,15 +428,17 @@ queries:
           compound_count
         FROM grouped
         ORDER BY ko_count DESC, pathway ASC
-        LIMIT 10;
+        ;
     python:
       description: Python sqlite3 script for UC-5 pathway KO coverage ranking.
-      script: |
+      script: |-
+        import json
         import sqlite3
 
         db_path = "data/biorempp.sqlite"
         query = """
         WITH params AS (
+          -- source: 'all' | 'KEGG' | 'HADEG' | 'COMPOUND_PATHWAY'
           SELECT 'all' AS source
         ),
         grouped AS (
@@ -445,25 +457,24 @@ queries:
           compound_count
         FROM grouped
         ORDER BY ko_count DESC, pathway ASC
-        LIMIT 10;
+        ;
         """
 
         with sqlite3.connect(db_path) as conn:
-          rows = conn.execute(query).fetchall()
-          print("rows:", len(rows))
-          for row in rows:
-            print(row)
+          conn.row_factory = sqlite3.Row
+          rows = [dict(row) for row in conn.execute(query).fetchall()]
+
+        print(json.dumps({"rows": rows}, ensure_ascii=False, sort_keys=True))
     notes:
       - Functional coverage in this UC is defined as distinct KO count by pathway.
       - Results are exploratory and sensitive to selected source scope.
-
   uc7_genes_most_connected:
     button_label: View Queries
     title: UC-7 Query Recipes (Most Connected Genes)
     introduction: Reproduce UC-7 gene connectivity ranking by counting distinct compounds per gene symbol.
     sqlite:
       description: Gene ranking by COUNT(DISTINCT cpd), with optional search and range filters.
-      query: |
+      query: |-
         WITH gene_rank AS (
           SELECT
             cgm.genesymbol,
@@ -485,10 +496,11 @@ queries:
           ko_count
         FROM gene_rank
         ORDER BY compound_count DESC, genesymbol ASC
-        LIMIT 10;
+        ;
     python:
       description: Python sqlite3 script to run UC-7 ranking with the same SQL logic.
-      script: |
+      script: |-
+        import json
         import sqlite3
 
         db_path = "data/biorempp.sqlite"
@@ -514,25 +526,24 @@ queries:
           ko_count
         FROM gene_rank
         ORDER BY compound_count DESC, genesymbol ASC
-        LIMIT 10;
+        ;
         """
 
         with sqlite3.connect(db_path) as conn:
-          rows = conn.execute(query).fetchall()
-          print("rows:", len(rows))
-          for row in rows:
-            print(row)
+          conn.row_factory = sqlite3.Row
+          rows = [dict(row) for row in conn.execute(query).fetchall()]
+
+        print(json.dumps({"rows": rows}, ensure_ascii=False, sort_keys=True))
     notes:
       - UC7 connectivity is defined as distinct compounds per gene symbol.
       - Results are exploratory connectivity signals for hypothesis generation.
-
   uc8_genes_linked_toxic_compounds:
     button_label: View Queries
     title: UC-8 Query Recipes (Genes Linked to Toxic Compounds)
     introduction: Reproduce gene-level toxic compound linkage by joining gene-compound mappings with endpoint-level toxicity values.
     sqlite:
       description: Gene ranking by toxic compound count under selected endpoint and threshold window, with median and p90 toxicity statistics.
-      query: |
+      query: |-
         WITH params AS (
           -- endpoint: selected endpoint (example: avian)
           -- threshold_min / threshold_max: toxicity value window
@@ -618,24 +629,27 @@ queries:
         JOIN quantiles q
           ON q.genesymbol = gs.genesymbol
         WHERE q.toxic_compound_count > 0
-        ORDER BY q.toxic_compound_count DESC, q.max_prediction DESC, gs.genesymbol ASC
-        LIMIT 10;
+        ORDER BY
+          q.toxic_compound_count DESC,
+          ROUND(q.max_prediction, 4) DESC,
+          LOWER(gs.genesymbol) ASC,
+          gs.genesymbol DESC
+        ;
     python:
       description: Python sqlite3 script to run UC-8 ranking with endpoint-level threshold filtering and quantile metrics.
-      script: |
+      script: |-
+        import json
         import sqlite3
 
         db_path = "data/biorempp.sqlite"
-        endpoint = "avian"
-        threshold_min = 0.0
-        threshold_max = None
-
         query = """
         WITH params AS (
+          -- endpoint: selected endpoint (example: avian)
+          -- threshold_min / threshold_max: toxicity value window
           SELECT
-            ? AS endpoint,
-            ? AS threshold_min,
-            ? AS threshold_max
+            'avian' AS endpoint,
+            0.00 AS threshold_min,
+            NULL AS threshold_max
         ),
         gene_scope AS (
           SELECT
@@ -714,29 +728,29 @@ queries:
         JOIN quantiles q
           ON q.genesymbol = gs.genesymbol
         WHERE q.toxic_compound_count > 0
-        ORDER BY q.toxic_compound_count DESC, q.max_prediction DESC, gs.genesymbol ASC
-        LIMIT 10;
+        ORDER BY
+          q.toxic_compound_count DESC,
+          ROUND(q.max_prediction, 4) DESC,
+          LOWER(gs.genesymbol) ASC,
+          gs.genesymbol DESC
+        ;
         """
 
         with sqlite3.connect(db_path) as conn:
-          rows = conn.execute(
-            query,
-            (endpoint, threshold_min, threshold_max),
-          ).fetchall()
-          print("rows:", len(rows))
-          for row in rows:
-            print(row)
+          conn.row_factory = sqlite3.Row
+          rows = [dict(row) for row in conn.execute(query).fetchall()]
+
+        print(json.dumps({"rows": rows}, ensure_ascii=False, sort_keys=True))
     notes:
       - UC8 toxic linkage is defined as COUNT(DISTINCT cpd) above the selected endpoint threshold.
       - Results are exploratory endpoint-context signals for hypothesis generation and prioritization.
-
   uc6_pathways_toxic_compounds:
     button_label: View Queries
     title: UC-6 Query Recipes (Pathways Associated with Toxic Compounds)
     introduction: Reproduce pathway-level toxic association ranking by joining pathway-compound links with endpoint-level toxicity values.
     sqlite:
       description: Pathway ranking under endpoint context with prediction threshold filtering (no mean-derived toxicity score).
-      query: |
+      query: |-
         WITH params AS (
           -- source: 'all' | 'KEGG' | 'HADEG' | 'COMPOUND_PATHWAY'
           -- risk_mode: 'endpoint' | 'group_peak'
@@ -840,15 +854,21 @@ queries:
         FROM pathway_stats
         WHERE toxic_compound_count > 0
         ORDER BY toxic_compound_count DESC, max_prediction DESC, pathway ASC
-        LIMIT 10;
+        ;
     python:
       description: Python sqlite3 script reproducing UC-6 pathway toxicity ranking under endpoint context and threshold.
-      script: |
+      script: |-
+        import json
         import sqlite3
 
         db_path = "data/biorempp.sqlite"
         query = """
         WITH params AS (
+          -- source: 'all' | 'KEGG' | 'HADEG' | 'COMPOUND_PATHWAY'
+          -- risk_mode: 'endpoint' | 'group_peak'
+          -- endpoint_group: 'all' | 'ecotoxicity' | 'genotoxicity_carcinogenicity' | 'nuclear_receptors' | 'stress_response' | 'organ_irritation' | 'other'
+          -- endpoint: explicit endpoint when risk_mode='endpoint'
+          -- threshold_min: prediction lower bound
           SELECT
             'all' AS source,
             'endpoint' AS risk_mode,
@@ -946,18 +966,17 @@ queries:
         FROM pathway_stats
         WHERE toxic_compound_count > 0
         ORDER BY toxic_compound_count DESC, max_prediction DESC, pathway ASC
-        LIMIT 10;
+        ;
         """
 
         with sqlite3.connect(db_path) as conn:
-          rows = conn.execute(query).fetchall()
-          print("rows:", len(rows))
-          for row in rows:
-            print(row)
+          conn.row_factory = sqlite3.Row
+          rows = [dict(row) for row in conn.execute(query).fetchall()]
+
+        print(json.dumps({"rows": rows}, ensure_ascii=False, sort_keys=True))
     notes:
       - UC6 uses endpoint-level values and threshold filters, without relying on toxicity mean as the decision metric.
       - Pathway ranking is exploratory and reflects annotation-based linkage under selected endpoint context.
-
   uc3_risk_vs_bioremediation_potential:
     button_label: View Queries
     title: UC-3 Query Recipes (Risk vs Bioremediation Potential)
@@ -1010,7 +1029,8 @@ queries:
         ORDER BY r.cpd ASC;
     python:
       description: Python sqlite3 script to run UC-3 base point extraction with thresholds.
-      script: |
+      script: |-
+        import json
         import sqlite3
 
         db_path = "data/biorempp.sqlite"
@@ -1048,17 +1068,23 @@ queries:
           r.pathway_count,
           r.y_value,
           t.x_threshold,
-          t.y_threshold
+          t.y_threshold,
+          CASE
+            WHEN r.gene_count >= t.x_threshold AND r.y_value >= t.y_threshold THEN 'top_right'
+            WHEN r.gene_count <  t.x_threshold AND r.y_value >= t.y_threshold THEN 'top_left'
+            WHEN r.gene_count >= t.x_threshold AND r.y_value <  t.y_threshold THEN 'bottom_right'
+            ELSE 'bottom_left'
+          END AS quadrant
         FROM ranked r
         CROSS JOIN thresholds t
         ORDER BY r.cpd ASC;
         """
 
         with sqlite3.connect(db_path) as conn:
-          rows = conn.execute(query).fetchall()
-          print("rows:", len(rows))
-          for row in rows[:10]:
-            print(row)
+          conn.row_factory = sqlite3.Row
+          rows = [dict(row) for row in conn.execute(query).fetchall()]
+
+        print(json.dumps({"rows": rows}, ensure_ascii=False, sort_keys=True))
     notes:
       - Thresholds are percentile-based and context-dependent in the app.
       - This recipe is intended for exploratory reproducibility, not causal inference.

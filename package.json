@@ -26,7 +26,8 @@
     "ingest:sqlite": "node scripts/ingest-sqlite.mjs",
     "check:footprint": "node scripts/check-runtime-footprint.mjs",
     "ingest:data": "npm run ingest:sqlite",
-    "start": "npm run compile:configs && node server/index.mjs"
+    "start": "npm run compile:configs && node server/index.mjs",
+    "test:guided:compliance": "node .archive/test_query/run_guided_compliance.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
