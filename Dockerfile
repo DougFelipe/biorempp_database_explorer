@@ -6,7 +6,7 @@ COPY package*.json ./
 
 FROM base AS dev
 
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 COPY . .
 
@@ -25,7 +25,7 @@ CMD ["npm", "run", "dev"]
 
 FROM base AS build
 
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 COPY . .
 
@@ -47,7 +47,7 @@ ENV SQLITE_DB_PATH=/app/data/biorempp.sqlite
 ENV BIOREMPP_URL_BASE_PATH=/
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev --legacy-peer-deps
 
 COPY --from=build /app/server ./server
 COPY --from=build /app/dist ./dist
