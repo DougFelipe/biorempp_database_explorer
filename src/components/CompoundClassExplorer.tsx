@@ -1,160 +1,163 @@
-import { useEffect, useState } from 'react';
-import { Search, X } from 'lucide-react';
-import { getCompoundClasses } from '../services/api';
-import type { CompoundClassFilters, CompoundClassSummary } from '../types/database';
-import { Pagination } from './Pagination';
+import { useCallback, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
+import { getCompoundClasses } from '@/features/compound-classes/api';
+import type { CompoundClassFilters, CompoundClassSummary } from '@/features/compound-classes/types';
+import { useAsyncResource } from '@/shared/hooks/useAsyncResource';
+import { useFilterState } from '@/shared/hooks/useFilterState';
+import { usePaginatedList } from '@/shared/hooks/usePaginatedList';
+import {
+  Badge,
+  Button,
+  DataTable,
+  ExplorerLayout,
+  FilterToolbar,
+  PaginationFooter,
+  ResultSummaryBar,
+  RowLinkCell,
+  SearchField,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/ui';
 
 interface CompoundClassExplorerProps {
   onCompoundClassSelect?: (compoundclass: string) => void;
 }
 
 export function CompoundClassExplorer({ onCompoundClassSelect }: CompoundClassExplorerProps) {
-  const [classes, setClasses] = useState<CompoundClassSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [pageSize] = useState(50);
-  const [filters, setFilters] = useState<CompoundClassFilters>({});
   const [searchInput, setSearchInput] = useState('');
+  const { activeFilterCount, filters, resetFilters, setFilterValue } = useFilterState<CompoundClassFilters>({});
+  const { page, pageSize, resetPagination, setPage, syncPagination, total, totalPages } = usePaginatedList(50);
 
-  useEffect(() => {
-    loadClasses();
-  }, [currentPage, filters]);
+  const loadClasses = useCallback(async () => {
+    const response = await getCompoundClasses(filters, { page, pageSize });
+    syncPagination(response);
+    return response.data;
+  }, [filters, page, pageSize, syncPagination]);
 
-  async function loadClasses() {
-    setLoading(true);
-    try {
-      const response = await getCompoundClasses(filters, { page: currentPage, pageSize });
-      setClasses(response.data);
-      setTotalPages(response.totalPages);
-      setTotal(response.total);
-    } catch (error) {
-      console.error('Error loading compound classes:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: classesData, error, loading, reload } = useAsyncResource<CompoundClassSummary[]>(loadClasses, {
+    initialData: [],
+  });
+  const classes = classesData ?? [];
 
-  function handleFilterChange(key: keyof CompoundClassFilters, value: string | undefined) {
-    setFilters((prev) => {
-      const next = { ...prev };
-      if (!value) {
-        delete next[key];
-      } else {
-        next[key] = value;
-      }
-      return next;
-    });
-    setCurrentPage(1);
+  function updateFilter<K extends keyof CompoundClassFilters>(key: K, value: CompoundClassFilters[K] | undefined) {
+    setFilterValue(key, value);
+    resetPagination();
   }
 
   function handleSearch() {
-    handleFilterChange('search', searchInput || undefined);
+    updateFilter('search', searchInput || undefined);
   }
 
   function clearFilters() {
-    setFilters({});
+    resetFilters();
     setSearchInput('');
-    setCurrentPage(1);
+    resetPagination();
   }
 
-  const activeFilterCount = Object.keys(filters).length;
+  const hasRowNavigation = Boolean(onCompoundClassSelect);
+  const summaryText = useMemo(() => {
+    return (
+      <>
+        Showing <strong>{classes.length}</strong> of <strong>{total}</strong> classes
+      </>
+    );
+  }, [classes.length, total]);
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Compound Classes</h2>
-
-        <div className="flex items-center gap-2">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search by compound class..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
+    <ExplorerLayout
+      eyebrow="Exploration"
+      title="Compound Classes"
+      description="Browse compound-class level aggregates before opening the class-specific detail overview."
+      toolbar={
+        <FilterToolbar>
+          <SearchField
+            value={searchInput}
+            onChange={setSearchInput}
+            onSearch={handleSearch}
+            placeholder="Search by compound class..."
+          />
+        </FilterToolbar>
+      }
+      footer={
+        activeFilterCount > 0 ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="secondary">
+              {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'}
+            </Badge>
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="h-4 w-4" />
+              Clear filters
+            </Button>
           </div>
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Search
-          </button>
-        </div>
+        ) : undefined
+      }
+    >
+      <DataTable
+        loading={loading}
+        error={error}
+        isEmpty={classes.length === 0}
+        emptyMessage="No compound classes matched the current search."
+        loadingMessage="Please wait while compound classes are loaded."
+        onRetry={() => {
+          void reload();
+        }}
+        summary={<ResultSummaryBar summary={summaryText} />}
+        footer={<PaginationFooter currentPage={page} totalPages={totalPages} onPageChange={setPage} />}
+      >
+        <Table>
+          <TableHeader className="bg-slate-50/90">
+            <TableRow>
+              <TableHead className="pl-6">Compound Class</TableHead>
+              <TableHead>Compound Count</TableHead>
+              <TableHead>KO Count</TableHead>
+              <TableHead>Gene Count</TableHead>
+              <TableHead className="pr-6">Pathway Annotations</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {classes.map((compoundClass) => (
+              <TableRow
+                key={compoundClass.compoundclass}
+                className={hasRowNavigation ? 'cursor-pointer' : undefined}
+                onClick={() => onCompoundClassSelect?.(compoundClass.compoundclass)}
+                onKeyDown={(event) => {
+                  if (!onCompoundClassSelect) {
+                    return;
+                  }
 
-        {activeFilterCount > 0 && (
-          <button
-            onClick={clearFilters}
-            className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-          >
-            <X className="w-4 h-4" />
-            Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
-          </button>
-        )}
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <p className="text-sm text-gray-600">
-            Showing {classes.length} of {total} classes
-          </p>
-        </div>
-
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">Loading compound classes...</div>
-        ) : classes.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">No compound classes found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Compound Class
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Compound Count
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    KO Count
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Gene Count
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pathway Annotations
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {classes.map((item) => (
-                  <tr
-                    key={item.compoundclass}
-                    className={`hover:bg-gray-50 ${onCompoundClassSelect ? 'cursor-pointer' : ''}`}
-                    onClick={() => onCompoundClassSelect?.(item.compoundclass)}
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onCompoundClassSelect(compoundClass.compoundclass);
+                  }
+                }}
+                tabIndex={hasRowNavigation ? 0 : undefined}
+              >
+                {hasRowNavigation ? (
+                  <RowLinkCell
+                    className="pl-6"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onCompoundClassSelect?.(compoundClass.compoundclass);
+                    }}
                   >
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.compoundclass}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.compound_count}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.ko_count}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.gene_count}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.pathway_count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200">
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
-          </div>
-        )}
-      </div>
-    </div>
+                    {compoundClass.compoundclass}
+                  </RowLinkCell>
+                ) : (
+                  <TableCell className="pl-6 font-medium">{compoundClass.compoundclass}</TableCell>
+                )}
+                <TableCell>{compoundClass.compound_count}</TableCell>
+                <TableCell>{compoundClass.ko_count}</TableCell>
+                <TableCell>{compoundClass.gene_count}</TableCell>
+                <TableCell className="pr-6">{compoundClass.pathway_count}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DataTable>
+    </ExplorerLayout>
   );
 }
