@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -21,6 +22,11 @@ export default defineConfig(({ mode }) => {
   return {
     base: basePath,
     plugins: [react()],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+      },
+    },
     optimizeDeps: {
       exclude: ['lucide-react'],
     },
