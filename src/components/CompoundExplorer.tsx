@@ -1,450 +1,439 @@
-import { useState, useEffect } from 'react';
-import { Search, Download, X } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { Download, X } from 'lucide-react';
 import {
-  getCompounds,
-  getUniqueCompoundClasses,
-  getUniqueReferenceAGs,
-  getUniqueGenes,
-  getPathwayOptions,
   exportCompoundsToCSV,
   exportCompoundsToJSON,
-} from '../services/api';
-import type { CompoundSummary, CompoundFilters, PathwayOption } from '../types/database';
-import { Pagination } from './Pagination';
+  getCompounds,
+} from '@/features/compounds/api';
+import type { CompoundFilters, CompoundSummary } from '@/features/compounds/types';
+import { getPathwayOptions, getUniqueCompoundClasses, getUniqueGenes, getUniqueReferenceAGs } from '@/features/meta/api';
+import type { PathwayOption } from '@/features/meta/types';
+import { InlineStatusBanner } from '@/shared/feedback';
+import { useAsyncResource } from '@/shared/hooks/useAsyncResource';
+import { useFileExport } from '@/shared/hooks/useFileExport';
+import { useFilterState } from '@/shared/hooks/useFilterState';
+import { usePaginatedList } from '@/shared/hooks/usePaginatedList';
+import {
+  Badge,
+  Button,
+  DataTable,
+  ExplorerLayout,
+  ExportActions,
+  FilterField,
+  FilterGrid,
+  FilterToolbar,
+  PaginationFooter,
+  ResultSummaryBar,
+  RowLinkCell,
+  SearchField,
+  Select,
+  Input,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/ui';
 
 interface CompoundExplorerProps {
   onCompoundSelect: (cpd: string) => void;
 }
 
+interface CompoundExplorerMetadata {
+  compoundClasses: string[];
+  pathwayOptions: PathwayOption[];
+  genes: string[];
+  referenceAGs: string[];
+}
+
+const EMPTY_METADATA: CompoundExplorerMetadata = {
+  compoundClasses: [],
+  pathwayOptions: [],
+  genes: [],
+  referenceAGs: [],
+};
+
 export function CompoundExplorer({ onCompoundSelect }: CompoundExplorerProps) {
-  const [compounds, setCompounds] = useState<CompoundSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [pageSize] = useState(50);
-
-  const [compoundClasses, setCompoundClasses] = useState<string[]>([]);
-  const [referenceAGs, setReferenceAGs] = useState<string[]>([]);
-  const [genes, setGenes] = useState<string[]>([]);
-  const [pathwayOptions, setPathwayOptions] = useState<PathwayOption[]>([]);
-  const [filters, setFilters] = useState<CompoundFilters>({});
   const [searchInput, setSearchInput] = useState('');
+  const [exportError, setExportError] = useState<string | null>(null);
+  const {
+    activeFilterCount,
+    filters,
+    resetFilters,
+    setFilterValue,
+  } = useFilterState<CompoundFilters>({});
+  const {
+    page,
+    pageSize,
+    resetPagination,
+    setPage,
+    syncPagination,
+    total,
+    totalPages,
+  } = usePaginatedList(50);
+  const { exporting, runExport } = useFileExport();
 
-  useEffect(() => {
-    loadMetadata();
+  const loadMetadata = useCallback(async () => {
+    const [compoundClasses, referenceAGs, genes, pathwayOptions] = await Promise.all([
+      getUniqueCompoundClasses(),
+      getUniqueReferenceAGs(),
+      getUniqueGenes(),
+      getPathwayOptions(),
+    ]);
+
+    return {
+      compoundClasses,
+      genes,
+      pathwayOptions,
+      referenceAGs,
+    };
   }, []);
 
-  useEffect(() => {
-    loadCompounds();
-  }, [currentPage, filters]);
+  const { data: metadataData, error: metadataError } = useAsyncResource(loadMetadata, {
+    initialData: EMPTY_METADATA,
+  });
+  const metadata = metadataData ?? EMPTY_METADATA;
 
-  async function loadMetadata() {
-    try {
-      const [classes, refs, availableGenes, availablePathways] = await Promise.all([
-        getUniqueCompoundClasses(),
-        getUniqueReferenceAGs(),
-        getUniqueGenes(),
-        getPathwayOptions(),
-      ]);
-      setCompoundClasses(classes);
-      setReferenceAGs(refs);
-      setGenes(availableGenes);
-      setPathwayOptions(availablePathways);
-    } catch (error) {
-      console.error('Error loading metadata:', error);
+  const loadCompounds = useCallback(async () => {
+    const response = await getCompounds(filters, { page, pageSize });
+    syncPagination(response);
+    return response.data;
+  }, [filters, page, pageSize, syncPagination]);
+
+  const { data: compoundsData, error, loading, reload } = useAsyncResource<CompoundSummary[]>(loadCompounds, {
+    initialData: [],
+  });
+  const compounds = compoundsData ?? [];
+
+  const availablePathwaySources = useMemo(() => {
+    return [...new Set(metadata.pathwayOptions.map((item) => item.source))].sort((left, right) =>
+      left.localeCompare(right)
+    );
+  }, [metadata.pathwayOptions]);
+
+  const pathwaysBySource = useMemo(() => {
+    return availablePathwaySources.map((source) => ({
+      pathways: [
+        ...new Set(metadata.pathwayOptions.filter((item) => item.source === source).map((item) => item.pathway)),
+      ].sort((left, right) => left.localeCompare(right)),
+      source,
+    }));
+  }, [availablePathwaySources, metadata.pathwayOptions]);
+
+  const visiblePathways = useMemo(() => {
+    if (!filters.pathway_source) {
+      return [];
     }
-  }
 
-  async function loadCompounds() {
-    setLoading(true);
-    try {
-      const response = await getCompounds(filters, { page: currentPage, pageSize });
-      setCompounds(response.data);
-      setTotalPages(response.totalPages);
-      setTotal(response.total);
-    } catch (error) {
-      console.error('Error loading compounds:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
+    return pathwaysBySource.find((entry) => entry.source === filters.pathway_source)?.pathways ?? [];
+  }, [filters.pathway_source, pathwaysBySource]);
 
-  function handleFilterChange(key: keyof CompoundFilters, value: string | number | undefined) {
-    setFilters(prev => {
-      const newFilters = { ...prev };
-      if (value === '' || value === undefined) {
-        delete newFilters[key];
-      } else {
-        newFilters[key] = value as never;
-      }
-      return newFilters;
-    });
-    setCurrentPage(1);
+  function updateFilter<K extends keyof CompoundFilters>(key: K, value: CompoundFilters[K] | undefined) {
+    setFilterValue(key, value);
+    resetPagination();
   }
-
-  const availablePathwaySources = [...new Set(pathwayOptions.map((item) => item.source))]
-    .sort((a, b) => a.localeCompare(b));
-  const pathwaysBySource = availablePathwaySources.map((source) => ({
-    source,
-    pathways: [
-      ...new Set(pathwayOptions.filter((item) => item.source === source).map((item) => item.pathway)),
-    ].sort((a, b) => a.localeCompare(b)),
-  }));
-  const visiblePathways = filters.pathway_source
-    ? pathwaysBySource.find((entry) => entry.source === filters.pathway_source)?.pathways ?? []
-    : [];
 
   function handleSearch() {
-    handleFilterChange('search', searchInput || undefined);
+    updateFilter('search', searchInput || undefined);
   }
 
   function clearFilters() {
-    setFilters({});
+    resetFilters();
     setSearchInput('');
-    setCurrentPage(1);
+    resetPagination();
   }
 
-  async function handleExport(format: 'csv' | 'json') {
-    try {
-      const data = format === 'csv'
-        ? await exportCompoundsToCSV(filters)
-        : await exportCompoundsToJSON(filters);
+  function handlePathwaySourceChange(nextSource: string | undefined) {
+    updateFilter('pathway_source', nextSource);
 
-      const blob = new Blob([data], { type: format === 'csv' ? 'text/csv' : 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `compounds.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export error:', error);
+    if (
+      filters.pathway &&
+      nextSource &&
+      !metadata.pathwayOptions.some((item) => item.source === nextSource && item.pathway === filters.pathway)
+    ) {
+      updateFilter('pathway', undefined);
     }
   }
 
-  const activeFilterCount = Object.keys(filters).length;
+  async function handleExport(format: 'csv' | 'json') {
+    setExportError(null);
+
+    try {
+      await runExport({
+        filename: `compounds.${format}`,
+        loader: () => (format === 'csv' ? exportCompoundsToCSV(filters) : exportCompoundsToJSON(filters)),
+        mimeType: format === 'csv' ? 'text/csv' : 'application/json',
+      });
+    } catch (nextError) {
+      setExportError(nextError instanceof Error ? nextError.message : 'Unknown export error.');
+    }
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">Compound Explorer</h2>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleExport('csv')}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              <Download className="w-4 h-4" />
-              Export CSV
-            </button>
-            <button
-              onClick={() => handleExport('json')}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Download className="w-4 h-4" />
-              Export JSON
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 mb-4">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search by compound name or ID..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    <ExplorerLayout
+      eyebrow="Exploration"
+      title="Compound Explorer"
+      description="Browse compound-level summaries, metadata-backed filters, export actions and direct links to detail views."
+      toolbar={
+        <FilterToolbar
+          actions={
+            <ExportActions
+              items={[
+                {
+                  disabled: exporting,
+                  icon: Download,
+                  id: 'compound-export-csv',
+                  label: exporting ? 'Exporting...' : 'Export CSV',
+                  onClick: () => handleExport('csv'),
+                  variant: 'success',
+                },
+                {
+                  disabled: exporting,
+                  icon: Download,
+                  id: 'compound-export-json',
+                  label: exporting ? 'Exporting...' : 'Export JSON',
+                  onClick: () => handleExport('json'),
+                },
+              ]}
             />
-            <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-          </div>
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Search
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Compound Class
-            </label>
-            <select
+          }
+        >
+          <SearchField
+            value={searchInput}
+            onChange={setSearchInput}
+            onSearch={handleSearch}
+            placeholder="Search by compound name or ID..."
+          />
+        </FilterToolbar>
+      }
+      filters={
+        <FilterGrid>
+          <FilterField label="Compound Class">
+            <Select
               value={filters.compoundclass || ''}
-              onChange={(e) => handleFilterChange('compoundclass', e.target.value || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => updateFilter('compoundclass', event.target.value || undefined)}
             >
               <option value="">All Classes</option>
-              {compoundClasses.map((cls) => (
-                <option key={cls} value={cls}>{cls}</option>
+              {metadata.compoundClasses.map((compoundClass) => (
+                <option key={compoundClass} value={compoundClass}>
+                  {compoundClass}
+                </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Pathway Source
-            </label>
-            <select
+          <FilterField label="Pathway Source">
+            <Select
               value={filters.pathway_source || ''}
-              onChange={(e) => {
-                const source = e.target.value || undefined;
-                handleFilterChange('pathway_source', source);
-                if (
-                  filters.pathway &&
-                  source &&
-                  !pathwayOptions.some((item) => item.source === source && item.pathway === filters.pathway)
-                ) {
-                  handleFilterChange('pathway', undefined);
-                }
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => handlePathwaySourceChange(event.target.value || undefined)}
             >
               <option value="">All Sources</option>
               {availablePathwaySources.map((source) => (
-                <option key={source} value={source}>{source}</option>
+                <option key={source} value={source}>
+                  {source}
+                </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Pathway
-            </label>
-            <select
+          <FilterField
+            label="Pathway"
+            hint={!filters.pathway_source ? 'Tip: select Pathway Source first to simplify this list.' : undefined}
+          >
+            <Select
               value={filters.pathway || ''}
-              onChange={(e) => handleFilterChange('pathway', e.target.value || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => updateFilter('pathway', event.target.value || undefined)}
             >
               <option value="">All Pathways</option>
-              {filters.pathway_source ? (
-                visiblePathways.map((pathway) => (
-                  <option key={pathway} value={pathway}>{pathway}</option>
-                ))
-              ) : (
-                pathwaysBySource.map((group) => (
-                  <optgroup key={group.source} label={group.source}>
-                    {group.pathways.map((pathway) => (
-                      <option key={`${group.source}-${pathway}`} value={pathway}>
-                        {pathway}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))
-              )}
-            </select>
-            {!filters.pathway_source && (
-              <p className="mt-1 text-xs text-gray-500">Tip: select Pathway Source first to simplify this list.</p>
-            )}
-          </div>
+              {filters.pathway_source
+                ? visiblePathways.map((pathway) => (
+                    <option key={pathway} value={pathway}>
+                      {pathway}
+                    </option>
+                  ))
+                : pathwaysBySource.map((group) => (
+                    <optgroup key={group.source} label={group.source}>
+                      {group.pathways.map((pathway) => (
+                        <option key={`${group.source}-${pathway}`} value={pathway}>
+                          {pathway}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+            </Select>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Gene
-            </label>
-            <select
-              value={filters.gene || ''}
-              onChange={(e) => handleFilterChange('gene', e.target.value || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
+          <FilterField label="Gene">
+            <Select value={filters.gene || ''} onChange={(event) => updateFilter('gene', event.target.value || undefined)}>
               <option value="">All Genes</option>
-              {genes.map((gene) => (
-                <option key={gene} value={gene}>{gene}</option>
+              {metadata.genes.map((gene) => (
+                <option key={gene} value={gene}>
+                  {gene}
+                </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Reference AG
-            </label>
-            <select
+          <FilterField label="Reference AG">
+            <Select
               value={filters.reference_ag || ''}
-              onChange={(e) => handleFilterChange('reference_ag', e.target.value || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => updateFilter('reference_ag', event.target.value || undefined)}
             >
               <option value="">All References</option>
-              {referenceAGs.map((ref) => (
-                <option key={ref} value={ref}>{ref}</option>
+              {metadata.referenceAGs.map((reference) => (
+                <option key={reference} value={reference}>
+                  {reference}
+                </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Min KO Count
-            </label>
-            <input
+          <FilterField label="Min KO Count">
+            <Input
               type="number"
               value={filters.ko_count_min || ''}
-              onChange={(e) => handleFilterChange('ko_count_min', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) =>
+                updateFilter('ko_count_min', event.target.value ? Number(event.target.value) : undefined)
+              }
               placeholder="Min"
             />
-          </div>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Max KO Count
-            </label>
-            <input
+          <FilterField label="Max KO Count">
+            <Input
               type="number"
               value={filters.ko_count_max || ''}
-              onChange={(e) => handleFilterChange('ko_count_max', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) =>
+                updateFilter('ko_count_max', event.target.value ? Number(event.target.value) : undefined)
+              }
               placeholder="Max"
             />
-          </div>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Min Gene Count
-            </label>
-            <input
+          <FilterField label="Min Gene Count">
+            <Input
               type="number"
               value={filters.gene_count_min || ''}
-              onChange={(e) => handleFilterChange('gene_count_min', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) =>
+                updateFilter('gene_count_min', event.target.value ? Number(event.target.value) : undefined)
+              }
               placeholder="Min"
             />
-          </div>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Max Gene Count
-            </label>
-            <input
+          <FilterField label="Max Gene Count">
+            <Input
               type="number"
               value={filters.gene_count_max || ''}
-              onChange={(e) => handleFilterChange('gene_count_max', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) =>
+                updateFilter('gene_count_max', event.target.value ? Number(event.target.value) : undefined)
+              }
               placeholder="Max"
             />
-          </div>
+          </FilterField>
+        </FilterGrid>
+      }
+      footer={
+        <div className="space-y-3">
+          {metadataError ? (
+            <InlineStatusBanner tone="warning">
+              Metadata filters could not be fully loaded. The explorer still uses the current server response.
+            </InlineStatusBanner>
+          ) : null}
 
+          {exportError ? <InlineStatusBanner tone="error">{exportError}</InlineStatusBanner> : null}
+
+          {activeFilterCount > 0 ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant="secondary">
+                {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'}
+              </Badge>
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <X className="h-4 w-4" />
+                Clear filters
+              </Button>
+            </div>
+          ) : null}
         </div>
+      }
+    >
+      <DataTable
+        loading={loading}
+        error={error}
+        onRetry={() => {
+          void reload();
+        }}
+        isEmpty={compounds.length === 0}
+        emptyMessage="No compounds matched the current filters."
+        summary={
+          <ResultSummaryBar
+            summary={
+              <>
+                Showing <strong>{compounds.length}</strong> of <strong>{total}</strong> compounds
+              </>
+            }
+          />
+        }
+        footer={<PaginationFooter currentPage={page} totalPages={totalPages} onPageChange={setPage} />}
+      >
+        <Table>
+          <TableHeader className="bg-slate-50/90">
+            <TableRow>
+              <TableHead className="pl-6">Compound ID</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Class</TableHead>
+              <TableHead>KO Count</TableHead>
+              <TableHead>Gene Count</TableHead>
+              <TableHead title="Includes HADEG, KEGG and Compound Pathway annotations">
+                Pathway Annotations
+              </TableHead>
+              <TableHead>Toxicity Risk Mean</TableHead>
+              <TableHead>High Risk Endpoints</TableHead>
+              <TableHead className="pr-6">References</TableHead>
+            </TableRow>
+          </TableHeader>
 
-        {activeFilterCount > 0 && (
-          <button
-            onClick={clearFilters}
-            className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-          >
-            <X className="w-4 h-4" />
-            Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
-          </button>
-        )}
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <p className="text-sm text-gray-600">
-            Showing {compounds.length} of {total} compounds
-          </p>
-        </div>
-
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">
-            Loading compounds...
-          </div>
-        ) : compounds.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No compounds found matching your filters.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Compound ID
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Class
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    KO Count
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Gene Count
-                  </th>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    title="Includes HADEG, KEGG and Compound Pathway annotations"
-                  >
-                    Pathway Annotations
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Toxicity Risk Mean
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    High Risk Endpoints
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    References
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {compounds.map((compound) => (
-                  <tr
-                    key={compound.cpd}
-                    onClick={() => onCompoundSelect(compound.cpd)}
-                    className="hover:bg-blue-50 cursor-pointer transition-colors"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                      {compound.cpd}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {compound.compoundname || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {compound.compoundclass || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {compound.ko_count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {compound.gene_count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {compound.pathway_count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {compound.toxicity_risk_mean == null ? '-' : compound.toxicity_risk_mean.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {compound.high_risk_endpoint_count}
-                    </td>
-                    <td
-                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
-                      title={compound.reference_ag || 'No reference annotation'}
-                    >
-                      {compound.reference_count}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+          <TableBody>
+            {compounds.map((compound) => (
+              <TableRow
+                key={compound.cpd}
+                onClick={() => onCompoundSelect(compound.cpd)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onCompoundSelect(compound.cpd);
+                  }
+                }}
+                tabIndex={0}
+                className="cursor-pointer"
+              >
+                <RowLinkCell
+                  className="pl-6"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCompoundSelect(compound.cpd);
+                  }}
+                >
+                  {compound.cpd}
+                </RowLinkCell>
+                <TableCell>{compound.compoundname || '-'}</TableCell>
+                <TableCell>{compound.compoundclass || '-'}</TableCell>
+                <TableCell>{compound.ko_count}</TableCell>
+                <TableCell>{compound.gene_count}</TableCell>
+                <TableCell>{compound.pathway_count}</TableCell>
+                <TableCell>
+                  {compound.toxicity_risk_mean == null ? '-' : compound.toxicity_risk_mean.toFixed(2)}
+                </TableCell>
+                <TableCell>{compound.high_risk_endpoint_count}</TableCell>
+                <TableCell className="pr-6" title={compound.reference_ag || 'No reference annotation'}>
+                  {compound.reference_count}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DataTable>
+    </ExplorerLayout>
   );
 }
