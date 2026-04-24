@@ -1,13 +1,42 @@
-import { useEffect, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
+import { getUniqueCompoundClasses } from '@/features/meta/api';
+import { getToxicityData, getToxicityEndpoints, getToxicityLabels } from '@/features/toxicity/api';
+import type { ToxicityEndpoint, ToxicityFilters } from '@/features/toxicity/types';
+import { InlineStatusBanner } from '@/shared/feedback';
+import { useAsyncResource } from '@/shared/hooks/useAsyncResource';
+import { useFilterState } from '@/shared/hooks/useFilterState';
+import { usePaginatedList } from '@/shared/hooks/usePaginatedList';
 import {
-  getToxicityData,
-  getToxicityEndpoints,
-  getToxicityLabels,
-  getUniqueCompoundClasses,
-} from '../services/api';
-import type { ToxicityEndpoint, ToxicityFilters } from '../types/database';
-import { Pagination } from './Pagination';
+  Badge,
+  Button,
+  DataTable,
+  ExplorerLayout,
+  FilterField,
+  FilterGrid,
+  FilterToolbar,
+  Input,
+  PaginationFooter,
+  ResultSummaryBar,
+  SearchField,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/ui';
+
+interface ToxicityExplorerMetadata {
+  compoundClasses: string[];
+  endpoints: string[];
+}
+
+const EMPTY_METADATA: ToxicityExplorerMetadata = {
+  compoundClasses: [],
+  endpoints: [],
+};
 
 function formatEndpoint(endpoint: string) {
   return endpoint
@@ -15,300 +44,250 @@ function formatEndpoint(endpoint: string) {
     .replace(/\./g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 export function ToxicityExplorer() {
-  const [records, setRecords] = useState<ToxicityEndpoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [pageSize] = useState(50);
-
-  const [endpoints, setEndpoints] = useState<string[]>([]);
-  const [labels, setLabels] = useState<string[]>([]);
-  const [compoundClasses, setCompoundClasses] = useState<string[]>([]);
-
-  const [filters, setFilters] = useState<ToxicityFilters>({});
   const [searchInput, setSearchInput] = useState('');
+  const { activeFilterCount, filters, replaceFilters, setFilterValue } = useFilterState<ToxicityFilters>({});
+  const { page, pageSize, resetPagination, setPage, syncPagination, total, totalPages } = usePaginatedList(50);
 
-  useEffect(() => {
-    loadMetadata();
+  const loadMetadata = useCallback(async () => {
+    const [endpoints, compoundClasses] = await Promise.all([
+      getToxicityEndpoints(),
+      getUniqueCompoundClasses(),
+    ]);
+
+    return {
+      compoundClasses,
+      endpoints,
+    };
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [currentPage, filters]);
+  const { data: metadataData, error: metadataError } = useAsyncResource(loadMetadata, {
+    initialData: EMPTY_METADATA,
+  });
+  const metadata = metadataData ?? EMPTY_METADATA;
 
   useEffect(() => {
-    loadLabels();
+    if (filters.endpoint || metadata.endpoints.length === 0) {
+      return;
+    }
+
+    setFilterValue('endpoint', metadata.endpoints[0]);
+  }, [filters.endpoint, metadata.endpoints, setFilterValue]);
+
+  const loadLabels = useCallback(async () => {
+    if (!filters.endpoint) {
+      return [];
+    }
+
+    return getToxicityLabels(filters.endpoint);
   }, [filters.endpoint]);
 
-  async function loadMetadata() {
-    try {
-      const [availableEndpoints, classes] = await Promise.all([
-        getToxicityEndpoints(),
-        getUniqueCompoundClasses(),
-      ]);
+  const { data: labelsData, error: labelsError, setData: setLabelsData } = useAsyncResource<string[]>(loadLabels, {
+    enabled: Boolean(filters.endpoint),
+    initialData: [],
+  });
+  const labels = labelsData ?? [];
 
-      setEndpoints(availableEndpoints);
-      setCompoundClasses(classes);
-
-      if (availableEndpoints.length > 0) {
-        setFilters((prev) => {
-          if (prev.endpoint) {
-            return prev;
-          }
-          return { ...prev, endpoint: availableEndpoints[0] };
-        });
-      }
-    } catch (error) {
-      console.error('Error loading toxicity metadata:', error);
+  useEffect(() => {
+    if (filters.endpoint) {
+      return;
     }
-  }
 
-  async function loadLabels() {
-    try {
-      const availableLabels = await getToxicityLabels(filters.endpoint);
-      setLabels(availableLabels);
-    } catch (error) {
-      console.error('Error loading toxicity labels:', error);
+    setLabelsData([]);
+  }, [filters.endpoint, setLabelsData]);
+
+  useEffect(() => {
+    if (filters.label && !labels.includes(filters.label)) {
+      setFilterValue('label', undefined);
     }
-  }
+  }, [filters.label, labels, setFilterValue]);
 
-  async function loadData() {
-    setLoading(true);
-    try {
-      const response = await getToxicityData(filters, { page: currentPage, pageSize });
-      setRecords(response.data);
-      setTotalPages(response.totalPages);
-      setTotal(response.total);
-    } catch (error) {
-      console.error('Error loading toxicity data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loadRecords = useCallback(async () => {
+    const response = await getToxicityData(filters, { page, pageSize });
+    syncPagination(response);
+    return response.data;
+  }, [filters, page, pageSize, syncPagination]);
 
-  function handleFilterChange(key: keyof ToxicityFilters, value: string | number | undefined) {
-    setFilters((prev) => {
-      const newFilters = { ...prev };
-      if (value === '' || value === undefined) {
-        delete newFilters[key];
-      } else {
-        newFilters[key] = value as never;
-      }
-      return newFilters;
-    });
-    setCurrentPage(1);
+  const { data: recordsData, error, loading, reload } = useAsyncResource<ToxicityEndpoint[]>(loadRecords, {
+    initialData: [],
+  });
+  const records = recordsData ?? [];
+
+  function updateFilter<K extends keyof ToxicityFilters>(key: K, value: ToxicityFilters[K] | undefined) {
+    setFilterValue(key, value);
+    resetPagination();
   }
 
   function handleSearch() {
-    handleFilterChange('search', searchInput || undefined);
+    updateFilter('search', searchInput || undefined);
   }
 
   function clearFilters() {
     const endpoint = filters.endpoint;
-    setFilters(endpoint ? { endpoint } : {});
+    replaceFilters(endpoint ? { endpoint } : {});
     setSearchInput('');
-    setCurrentPage(1);
+    resetPagination();
   }
 
-  const activeFilterCount = Object.keys(filters).length;
+  const summaryText = useMemo(() => {
+    return (
+      <>
+        Showing <strong>{records.length}</strong> of <strong>{total}</strong> endpoint records
+      </>
+    );
+  }, [records.length, total]);
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Toxicity Explorer</h2>
-
-        <div className="flex items-center gap-2 mb-4">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search by compound name or ID..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-          </div>
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Search
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Endpoint
-            </label>
-            <select
+    <ExplorerLayout
+      eyebrow="Exploration"
+      title="Toxicity Explorer"
+      description="Inspect ToxCSM endpoint predictions with dependent endpoint and label filters."
+      toolbar={
+        <FilterToolbar>
+          <SearchField
+            value={searchInput}
+            onChange={setSearchInput}
+            onSearch={handleSearch}
+            placeholder="Search by compound name or ID..."
+          />
+        </FilterToolbar>
+      }
+      filters={
+        <FilterGrid className="xl:grid-cols-5">
+          <FilterField label="Endpoint">
+            <Select
               value={filters.endpoint || ''}
-              onChange={(e) => handleFilterChange('endpoint', e.target.value || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => updateFilter('endpoint', event.target.value || undefined)}
             >
               <option value="">All Endpoints</option>
-              {endpoints.map((endpoint) => (
-                <option key={endpoint} value={endpoint}>{formatEndpoint(endpoint)}</option>
+              {metadata.endpoints.map((endpoint) => (
+                <option key={endpoint} value={endpoint}>
+                  {formatEndpoint(endpoint)}
+                </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Label
-            </label>
-            <select
+          <FilterField label="Label">
+            <Select
               value={filters.label || ''}
-              onChange={(e) => handleFilterChange('label', e.target.value || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => updateFilter('label', event.target.value || undefined)}
+              disabled={!filters.endpoint}
             >
               <option value="">All Labels</option>
               {labels.map((label) => (
-                <option key={label} value={label}>{label}</option>
+                <option key={label} value={label}>
+                  {label}
+                </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Compound Class
-            </label>
-            <select
+          <FilterField label="Compound Class">
+            <Select
               value={filters.compoundclass || ''}
-              onChange={(e) => handleFilterChange('compoundclass', e.target.value || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => updateFilter('compoundclass', event.target.value || undefined)}
             >
               <option value="">All Classes</option>
-              {compoundClasses.map((compoundClass) => (
-                <option key={compoundClass} value={compoundClass}>{compoundClass}</option>
+              {metadata.compoundClasses.map((compoundClass) => (
+                <option key={compoundClass} value={compoundClass}>
+                  {compoundClass}
+                </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Min Value
-            </label>
-            <input
+          <FilterField label="Min Value">
+            <Input
               type="number"
               step="0.0001"
               value={filters.value_min || ''}
-              onChange={(e) => handleFilterChange('value_min', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => updateFilter('value_min', event.target.value ? Number(event.target.value) : undefined)}
               placeholder="Min"
             />
-          </div>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Max Value
-            </label>
-            <input
+          <FilterField label="Max Value">
+            <Input
               type="number"
               step="0.0001"
               value={filters.value_max || ''}
-              onChange={(e) => handleFilterChange('value_max', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) => updateFilter('value_max', event.target.value ? Number(event.target.value) : undefined)}
               placeholder="Max"
             />
-          </div>
+          </FilterField>
+        </FilterGrid>
+      }
+      footer={
+        <div className="space-y-3">
+          {metadataError ? (
+            <InlineStatusBanner tone="warning">
+              Toxicity metadata could not be fully loaded. Endpoint and class filters may be incomplete.
+            </InlineStatusBanner>
+          ) : null}
+
+          {labelsError ? (
+            <InlineStatusBanner tone="warning">
+              Endpoint labels could not be refreshed for the selected endpoint.
+            </InlineStatusBanner>
+          ) : null}
+
+          {activeFilterCount > 0 ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant="secondary">
+                {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'}
+              </Badge>
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <X className="h-4 w-4" />
+                Clear filters
+              </Button>
+            </div>
+          ) : null}
         </div>
-
-        {activeFilterCount > 0 && (
-          <button
-            onClick={clearFilters}
-            className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-          >
-            <X className="w-4 h-4" />
-            Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
-          </button>
-        )}
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <p className="text-sm text-gray-600">
-            Showing {records.length} of {total} endpoint records
-          </p>
-        </div>
-
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">
-            Loading toxicity records...
-          </div>
-        ) : records.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No toxicity records found matching your filters.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Compound ID
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Compound Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Class
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Endpoint
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Label
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Value
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {records.map((record) => (
-                  <tr key={`${record.cpd}-${record.endpoint}`} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                      {record.cpd}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {record.compoundname || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {record.compoundclass || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatEndpoint(record.endpoint)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {record.label || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-700">
-                      {record.value !== null ? record.value.toFixed(4) : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+      }
+    >
+      <DataTable
+        loading={loading}
+        error={error}
+        isEmpty={records.length === 0}
+        emptyMessage="No toxicity records matched the current filters."
+        loadingMessage="Please wait while toxicity endpoint records are loaded."
+        onRetry={() => {
+          void reload();
+        }}
+        summary={<ResultSummaryBar summary={summaryText} />}
+        footer={<PaginationFooter currentPage={page} totalPages={totalPages} onPageChange={setPage} />}
+      >
+        <Table>
+          <TableHeader className="bg-slate-50/90">
+            <TableRow>
+              <TableHead className="pl-6">Compound ID</TableHead>
+              <TableHead>Compound Name</TableHead>
+              <TableHead>Class</TableHead>
+              <TableHead>Endpoint</TableHead>
+              <TableHead>Label</TableHead>
+              <TableHead className="pr-6">Value</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {records.map((record) => (
+              <TableRow key={`${record.cpd}-${record.endpoint}`}>
+                <TableCell className="pl-6 font-medium text-accent">{record.cpd}</TableCell>
+                <TableCell>{record.compoundname || '-'}</TableCell>
+                <TableCell>{record.compoundclass || '-'}</TableCell>
+                <TableCell>{formatEndpoint(record.endpoint)}</TableCell>
+                <TableCell>{record.label || '-'}</TableCell>
+                <TableCell className="pr-6 font-mono">
+                  {record.value !== null ? record.value.toFixed(4) : '-'}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DataTable>
+    </ExplorerLayout>
   );
 }
