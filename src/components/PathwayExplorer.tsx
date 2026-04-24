@@ -1,8 +1,28 @@
-import { useState, useEffect } from 'react';
-import { Search, X } from 'lucide-react';
-import { getPathways } from '../services/api';
-import type { PathwaySummary, PathwayFilters } from '../types/database';
-import { Pagination } from './Pagination';
+import { useCallback, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
+import { getPathways } from '@/features/pathways/api';
+import type { PathwayFilters, PathwaySummary } from '@/features/pathways/types';
+import { useAsyncResource } from '@/shared/hooks/useAsyncResource';
+import { useFilterState } from '@/shared/hooks/useFilterState';
+import { usePaginatedList } from '@/shared/hooks/usePaginatedList';
+import {
+  Badge,
+  Button,
+  DataTable,
+  ExplorerLayout,
+  FilterField,
+  FilterToolbar,
+  PaginationFooter,
+  ResultSummaryBar,
+  RowLinkCell,
+  SearchField,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/ui';
 
 interface PathwayExplorerProps {
   onPathwaySelect?: (pathway: string, source?: string) => void;
@@ -11,208 +31,179 @@ interface PathwayExplorerProps {
 const SOURCE_OPTIONS = ['KEGG', 'HADEG'] as const;
 const DEFAULT_SOURCE: (typeof SOURCE_OPTIONS)[number] = 'KEGG';
 
+function sourceBadgeVariant(source: string) {
+  return source === 'HADEG' ? 'subtle' : 'success';
+}
+
 export function PathwayExplorer({ onPathwaySelect }: PathwayExplorerProps) {
-  const [pathways, setPathways] = useState<PathwaySummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [pageSize] = useState(50);
-
-  const [filters, setFilters] = useState<PathwayFilters>({ source: DEFAULT_SOURCE });
   const [searchInput, setSearchInput] = useState('');
+  const { filters, replaceFilters, setFilterValue } = useFilterState<PathwayFilters>({
+    source: DEFAULT_SOURCE,
+  });
+  const { page, pageSize, resetPagination, setPage, syncPagination, total, totalPages } = usePaginatedList(50);
 
-  useEffect(() => {
-    loadPathways();
-  }, [currentPage, filters]);
+  const loadPathways = useCallback(async () => {
+    const response = await getPathways(filters, { page, pageSize });
+    syncPagination(response);
+    return response.data;
+  }, [filters, page, pageSize, syncPagination]);
 
-  async function loadPathways() {
-    setLoading(true);
-    try {
-      const response = await getPathways(filters, { page: currentPage, pageSize });
-      setPathways(response.data);
-      setTotalPages(response.totalPages);
-      setTotal(response.total);
-    } catch (error) {
-      console.error('Error loading pathways:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: pathwaysData, error, loading, reload } = useAsyncResource<PathwaySummary[]>(loadPathways, {
+    initialData: [],
+  });
+  const pathways = pathwaysData ?? [];
 
-  function handleFilterChange<K extends keyof PathwayFilters>(key: K, value: PathwayFilters[K] | undefined) {
-    setFilters(prev => {
-      const newFilters = { ...prev };
-      if (value === '' || value === undefined) {
-        delete newFilters[key];
-      } else {
-        newFilters[key] = value;
+  const activeFilterCount = useMemo(() => {
+    return Object.entries(filters).filter(([key, value]) => {
+      if (value === undefined || value === '') {
+        return false;
       }
-      return newFilters;
-    });
-    setCurrentPage(1);
+
+      if (key === 'source') {
+        return value !== DEFAULT_SOURCE;
+      }
+
+      return true;
+    }).length;
+  }, [filters]);
+
+  function updateFilter<K extends keyof PathwayFilters>(key: K, value: PathwayFilters[K] | undefined) {
+    setFilterValue(key, value);
+    resetPagination();
   }
 
   function handleSearch() {
-    handleFilterChange('search', searchInput || undefined);
-  }
-
-  function handleSourceSelect(source: (typeof SOURCE_OPTIONS)[number]) {
-    handleFilterChange('source', source);
+    updateFilter('search', searchInput || undefined);
   }
 
   function clearFilters() {
-    setFilters({ source: DEFAULT_SOURCE });
+    replaceFilters({ source: DEFAULT_SOURCE });
     setSearchInput('');
-    setCurrentPage(1);
+    resetPagination();
   }
 
-  const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
-    if (value === undefined || value === '') {
-      return false;
-    }
-    if (key === 'source') {
-      return value !== DEFAULT_SOURCE;
-    }
-    return true;
-  }).length;
+  const hasRowNavigation = Boolean(onPathwaySelect);
+  const summaryText = useMemo(() => {
+    return (
+      <>
+        Showing <strong>{pathways.length}</strong> of <strong>{total}</strong> pathways
+      </>
+    );
+  }, [pathways.length, total]);
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Pathway Explorer</h2>
+    <ExplorerLayout
+      eyebrow="Exploration"
+      title="Pathway Explorer"
+      description="Inspect pathway rankings by source while keeping one database in focus at a time."
+      toolbar={
+        <FilterToolbar>
+          <SearchField value={searchInput} onChange={setSearchInput} onSearch={handleSearch} placeholder="Search pathways..." />
+        </FilterToolbar>
+      }
+      filters={
+        <div className="space-y-3">
+          <FilterField label="Source">
+            <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
+              {SOURCE_OPTIONS.map((source) => {
+                const selected = filters.source === source;
 
-        <div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search pathways..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-          </div>
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Search
-          </button>
-          <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50 self-start">
-            {SOURCE_OPTIONS.map((source) => {
-              const selected = filters.source === source;
-              return (
-                <button
-                  key={source}
-                  type="button"
-                  onClick={() => handleSourceSelect(source)}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    selected
-                      ? source === 'KEGG'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-blue-100 text-blue-800'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  {source}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <p className="text-xs text-gray-500">
-          Showing one database at a time to keep pathway rankings easier to inspect.
-        </p>
+                return (
+                  <Button
+                    key={source}
+                    variant={selected ? 'subtle' : 'ghost'}
+                    size="sm"
+                    onClick={() => updateFilter('source', source)}
+                    className="rounded-xl"
+                  >
+                    {source}
+                  </Button>
+                );
+              })}
+            </div>
+          </FilterField>
 
-        {activeFilterCount > 0 && (
-          <button
-            onClick={clearFilters}
-            className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-          >
-            <X className="w-4 h-4" />
-            Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
-          </button>
-        )}
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <p className="text-sm text-gray-600">
-            Showing {pathways.length} of {total} pathways
+          <p className="text-xs text-slate-500">
+            Showing one database at a time to keep pathway rankings easier to inspect.
           </p>
         </div>
+      }
+      footer={
+        activeFilterCount > 0 ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="secondary">
+              {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'}
+            </Badge>
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="h-4 w-4" />
+              Clear filters
+            </Button>
+          </div>
+        ) : undefined
+      }
+    >
+      <DataTable
+        loading={loading}
+        error={error}
+        isEmpty={pathways.length === 0}
+        emptyMessage="No pathways matched the current filters."
+        loadingMessage="Please wait while pathway rankings are loaded."
+        onRetry={() => {
+          void reload();
+        }}
+        summary={<ResultSummaryBar summary={summaryText} />}
+        footer={<PaginationFooter currentPage={page} totalPages={totalPages} onPageChange={setPage} />}
+      >
+        <Table>
+          <TableHeader className="bg-slate-50/90">
+            <TableRow>
+              <TableHead className="pl-6">Pathway</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Compound Count</TableHead>
+              <TableHead className="pr-6">Gene Count</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pathways.map((pathway, index) => (
+              <TableRow
+                key={`${pathway.pathway}-${pathway.source}-${index}`}
+                className={hasRowNavigation ? 'cursor-pointer' : undefined}
+                onClick={() => onPathwaySelect?.(pathway.pathway, pathway.source)}
+                onKeyDown={(event) => {
+                  if (!onPathwaySelect) {
+                    return;
+                  }
 
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">
-            Loading pathways...
-          </div>
-        ) : pathways.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No pathways found matching your filters.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pathway
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Source
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Compound Count
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Gene Count
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {pathways.map((pathway, idx) => (
-                  <tr
-                    key={`${pathway.pathway}-${pathway.source}-${idx}`}
-                    className={`hover:bg-gray-50 ${onPathwaySelect ? 'cursor-pointer' : ''}`}
-                    onClick={() => onPathwaySelect?.(pathway.pathway, pathway.source)}
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onPathwaySelect(pathway.pathway, pathway.source);
+                  }
+                }}
+                tabIndex={hasRowNavigation ? 0 : undefined}
+              >
+                {hasRowNavigation ? (
+                  <RowLinkCell
+                    className="pl-6"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPathwaySelect?.(pathway.pathway, pathway.source);
+                    }}
                   >
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {pathway.pathway}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        pathway.source === 'HADEG'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {pathway.source}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {pathway.compound_count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {pathway.gene_count}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+                    {pathway.pathway}
+                  </RowLinkCell>
+                ) : (
+                  <TableCell className="pl-6 font-medium">{pathway.pathway}</TableCell>
+                )}
+                <TableCell>
+                  <Badge variant={sourceBadgeVariant(pathway.source)}>{pathway.source}</Badge>
+                </TableCell>
+                <TableCell>{pathway.compound_count}</TableCell>
+                <TableCell className="pr-6">{pathway.gene_count}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DataTable>
+    </ExplorerLayout>
   );
 }
