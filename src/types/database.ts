@@ -1,3 +1,5 @@
+export type { PaginatedResponse, PaginationParams } from '@/shared/types';
+
 export interface CompoundSummary {
   cpd: string;
   compoundname: string | null;
@@ -402,17 +404,4 @@ export interface ToxicityFilters {
   value_min?: number;
   value_max?: number;
   search?: string;
-}
-
-export interface PaginationParams {
-  page: number;
-  pageSize: number;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 }
