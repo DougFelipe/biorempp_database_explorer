@@ -128,4 +128,76 @@ describe('CompoundExplorer', () => {
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
   });
+
+  it('changes pages when more than one result page is available', async () => {
+    const user = userEvent.setup();
+
+    mockGetCompounds.mockImplementation((_filters, pagination) => {
+      if (pagination.page === 2) {
+        return Promise.resolve({
+          data: [
+            {
+              cpd: 'C06790',
+              compoundname: 'Trichloroethene',
+              compoundclass: 'Aliphatic',
+              gene_count: 47,
+              genes: [],
+              high_risk_endpoint_count: 6,
+              ko_count: 47,
+              pathway_count: 19,
+              pathways: [],
+              reference_ag: 'ATSDR',
+              reference_count: 1,
+              smiles: 'C=C(Cl)Cl',
+              toxicity_risk_mean: 0.28,
+              toxicity_scores: {},
+              updated_at: '2026-04-05',
+            },
+          ],
+          page: 2,
+          pageSize: 50,
+          total: 2,
+          totalPages: 2,
+        });
+      }
+
+      return Promise.resolve({
+        data: [
+          {
+            cpd: 'C00014',
+            compoundname: 'Ammonia',
+            compoundclass: 'Nitrogen-containing',
+            gene_count: 327,
+            genes: [],
+            high_risk_endpoint_count: 2,
+            ko_count: 334,
+            pathway_count: 25,
+            pathways: [],
+            reference_ag: 'ATSDR; PSL',
+            reference_count: 2,
+            smiles: '[H]N([H])[H]',
+            toxicity_risk_mean: 0.22,
+            toxicity_scores: {},
+            updated_at: '2026-04-05',
+          },
+        ],
+        page: 1,
+        pageSize: 50,
+        total: 2,
+        totalPages: 2,
+      });
+    });
+
+    render(<CompoundExplorer onCompoundSelect={vi.fn()} />);
+
+    expect(await screen.findByText('Ammonia')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '2' }));
+
+    await waitFor(() => {
+      expect(mockGetCompounds).toHaveBeenLastCalledWith({}, { page: 2, pageSize: 50 });
+    });
+
+    expect(await screen.findByText('Trichloroethene')).toBeInTheDocument();
+  });
 });

@@ -18,6 +18,14 @@ const {
   mockGetUniqueReferenceAGs: vi.fn(),
 }));
 
+vi.mock('@/components/CompoundDetail', () => ({
+  CompoundDetail: ({ cpd }: { cpd: string }) => <h2>Compound Detail {cpd}</h2>,
+}));
+
+vi.mock('@/components/GeneDetail', () => ({
+  GeneDetail: ({ ko }: { ko: string }) => <h2>Gene Detail {ko}</h2>,
+}));
+
 vi.mock('@/features/compounds/api', () => ({
   exportCompoundsToCSV: vi.fn(),
   exportCompoundsToJSON: vi.fn(),
@@ -96,5 +104,18 @@ describe('App shell navigation', () => {
     expect(await screen.findByRole('heading', { name: 'Compound Explorer' })).toBeInTheDocument();
     expect(await screen.findByText('Ammonia')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'C00014' })).toBeInTheDocument();
+  });
+
+  it('renders compound and gene detail routes from the current location', async () => {
+    window.history.replaceState({}, '', '/compounds/C00014');
+    const firstRender = render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Compound Detail C00014' })).toBeInTheDocument();
+
+    firstRender.unmount();
+    window.history.replaceState({}, '', '/genes/K00001');
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Gene Detail K00001' })).toBeInTheDocument();
   });
 });
