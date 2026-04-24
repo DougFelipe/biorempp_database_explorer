@@ -1,222 +1,205 @@
-import { useState, useEffect } from 'react';
-import { Search, X } from 'lucide-react';
-import { getGenes } from '../services/api';
-import type { GeneSummary, GeneFilters } from '../types/database';
-import { Pagination } from './Pagination';
+import { useCallback, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
+import { getGenes } from '@/features/genes/api';
+import type { GeneFilters, GeneSummary } from '@/features/genes/types';
+import { useAsyncResource } from '@/shared/hooks/useAsyncResource';
+import { useFilterState } from '@/shared/hooks/useFilterState';
+import { usePaginatedList } from '@/shared/hooks/usePaginatedList';
+import {
+  Badge,
+  Button,
+  DataTable,
+  ExplorerLayout,
+  FilterField,
+  FilterGrid,
+  FilterToolbar,
+  Input,
+  PaginationFooter,
+  ResultSummaryBar,
+  RowLinkCell,
+  SearchField,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/ui';
 
 interface GeneExplorerProps {
   onGeneSelect?: (ko: string) => void;
 }
 
-export function GeneExplorer({ onGeneSelect }: GeneExplorerProps) {
-  const [genes, setGenes] = useState<GeneSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [pageSize] = useState(50);
-
-  const [filters, setFilters] = useState<GeneFilters>({});
-  const [searchInput, setSearchInput] = useState('');
-
-  useEffect(() => {
-    loadGenes();
-  }, [currentPage, filters]);
-
-  async function loadGenes() {
-    setLoading(true);
-    try {
-      const response = await getGenes(filters, { page: currentPage, pageSize });
-      setGenes(response.data);
-      setTotalPages(response.totalPages);
-      setTotal(response.total);
-    } catch (error) {
-      console.error('Error loading genes:', error);
-    } finally {
-      setLoading(false);
-    }
+function renderEnzymeActivities(activities: string[]) {
+  if (activities.length === 0) {
+    return '-';
   }
 
-  function handleFilterChange(key: keyof GeneFilters, value: string | number | undefined) {
-    setFilters(prev => {
-      const newFilters = { ...prev };
-      if (value === '' || value === undefined) {
-        delete newFilters[key];
-      } else {
-        newFilters[key] = value as never;
-      }
-      return newFilters;
-    });
-    setCurrentPage(1);
+  if (activities.length <= 2) {
+    return activities.join(', ');
+  }
+
+  return `${activities.slice(0, 2).join(', ')} +${activities.length - 2} more`;
+}
+
+export function GeneExplorer({ onGeneSelect }: GeneExplorerProps) {
+  const [searchInput, setSearchInput] = useState('');
+  const { activeFilterCount, filters, resetFilters, setFilterValue } = useFilterState<GeneFilters>({});
+  const { page, pageSize, resetPagination, setPage, syncPagination, total, totalPages } = usePaginatedList(50);
+
+  const loadGenes = useCallback(async () => {
+    const response = await getGenes(filters, { page, pageSize });
+    syncPagination(response);
+    return response.data;
+  }, [filters, page, pageSize, syncPagination]);
+
+  const { data: genesData, error, loading, reload } = useAsyncResource<GeneSummary[]>(loadGenes, {
+    initialData: [],
+  });
+  const genes = genesData ?? [];
+
+  function updateFilter<K extends keyof GeneFilters>(key: K, value: GeneFilters[K] | undefined) {
+    setFilterValue(key, value);
+    resetPagination();
   }
 
   function handleSearch() {
-    handleFilterChange('search', searchInput || undefined);
+    updateFilter('search', searchInput || undefined);
   }
 
   function clearFilters() {
-    setFilters({});
+    resetFilters();
     setSearchInput('');
-    setCurrentPage(1);
+    resetPagination();
   }
 
-  const activeFilterCount = Object.keys(filters).length;
+  const hasRowNavigation = Boolean(onGeneSelect);
+  const summaryText = useMemo(() => {
+    return (
+      <>
+        Showing <strong>{genes.length}</strong> of <strong>{total}</strong> genes
+      </>
+    );
+  }, [genes.length, total]);
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Gene / KO Explorer</h2>
-
-        <div className="flex items-center gap-2 mb-4">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search by gene symbol, name, or KO..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-          </div>
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Search
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Min Compound Count
-            </label>
-            <input
+    <ExplorerLayout
+      eyebrow="Exploration"
+      title="Gene / KO Explorer"
+      description="Browse KO and gene-level records with compound coverage, pathway counts and enzyme annotations."
+      toolbar={
+        <FilterToolbar>
+          <SearchField
+            value={searchInput}
+            onChange={setSearchInput}
+            onSearch={handleSearch}
+            placeholder="Search by gene symbol, name, or KO..."
+          />
+        </FilterToolbar>
+      }
+      filters={
+        <FilterGrid className="md:grid-cols-2 xl:grid-cols-2">
+          <FilterField label="Min Compound Count">
+            <Input
               type="number"
               value={filters.compound_count_min || ''}
-              onChange={(e) => handleFilterChange('compound_count_min', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) =>
+                updateFilter('compound_count_min', event.target.value ? Number(event.target.value) : undefined)
+              }
               placeholder="Min"
             />
-          </div>
+          </FilterField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Max Compound Count
-            </label>
-            <input
+          <FilterField label="Max Compound Count">
+            <Input
               type="number"
               value={filters.compound_count_max || ''}
-              onChange={(e) => handleFilterChange('compound_count_max', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(event) =>
+                updateFilter('compound_count_max', event.target.value ? Number(event.target.value) : undefined)
+              }
               placeholder="Max"
             />
+          </FilterField>
+        </FilterGrid>
+      }
+      footer={
+        activeFilterCount > 0 ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="secondary">
+              {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'}
+            </Badge>
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="h-4 w-4" />
+              Clear filters
+            </Button>
           </div>
-        </div>
+        ) : undefined
+      }
+    >
+      <DataTable
+        loading={loading}
+        error={error}
+        isEmpty={genes.length === 0}
+        emptyMessage="No genes matched the current filters."
+        loadingMessage="Please wait while gene records are loaded."
+        onRetry={() => {
+          void reload();
+        }}
+        summary={<ResultSummaryBar summary={summaryText} />}
+        footer={<PaginationFooter currentPage={page} totalPages={totalPages} onPageChange={setPage} />}
+      >
+        <Table>
+          <TableHeader className="bg-slate-50/90">
+            <TableRow>
+              <TableHead className="pl-6">KO</TableHead>
+              <TableHead>Gene Symbol</TableHead>
+              <TableHead>Gene Name</TableHead>
+              <TableHead>Compound Count</TableHead>
+              <TableHead>Pathway Count</TableHead>
+              <TableHead className="pr-6">Enzyme Activities</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {genes.map((gene) => (
+              <TableRow
+                key={gene.ko}
+                className={hasRowNavigation ? 'cursor-pointer' : undefined}
+                onClick={() => onGeneSelect?.(gene.ko)}
+                onKeyDown={(event) => {
+                  if (!onGeneSelect) {
+                    return;
+                  }
 
-        {activeFilterCount > 0 && (
-          <button
-            onClick={clearFilters}
-            className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-          >
-            <X className="w-4 h-4" />
-            Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
-          </button>
-        )}
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <p className="text-sm text-gray-600">
-            Showing {genes.length} of {total} genes
-          </p>
-        </div>
-
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">
-            Loading genes...
-          </div>
-        ) : genes.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No genes found matching your filters.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    KO
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Gene Symbol
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Gene Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Compound Count
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pathway Count
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Enzyme Activities
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {genes.map((gene) => (
-                  <tr
-                    key={gene.ko}
-                    className={`hover:bg-gray-50 ${onGeneSelect ? 'cursor-pointer' : ''}`}
-                    onClick={() => onGeneSelect?.(gene.ko)}
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onGeneSelect(gene.ko);
+                  }
+                }}
+                tabIndex={hasRowNavigation ? 0 : undefined}
+              >
+                {hasRowNavigation ? (
+                  <RowLinkCell
+                    className="pl-6"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onGeneSelect?.(gene.ko);
+                    }}
                   >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-600">
-                      {gene.ko}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {gene.genesymbol || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {gene.genename || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {gene.compound_count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {gene.pathway_count}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {gene.enzyme_activities.length > 0 ? (
-                        <div className="max-w-md">
-                          {gene.enzyme_activities.slice(0, 2).join(', ')}
-                          {gene.enzyme_activities.length > 2 && (
-                            <span className="text-gray-400"> +{gene.enzyme_activities.length - 2} more</span>
-                          )}
-                        </div>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+                    {gene.ko}
+                  </RowLinkCell>
+                ) : (
+                  <TableCell className="pl-6 font-mono font-medium text-accent">{gene.ko}</TableCell>
+                )}
+                <TableCell>{gene.genesymbol || '-'}</TableCell>
+                <TableCell>{gene.genename || '-'}</TableCell>
+                <TableCell>{gene.compound_count}</TableCell>
+                <TableCell>{gene.pathway_count}</TableCell>
+                <TableCell className="pr-6">{renderEnzymeActivities(gene.enzyme_activities)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DataTable>
+    </ExplorerLayout>
   );
 }
