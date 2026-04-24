@@ -1,4 +1,4 @@
-import { getClientBasePath, withBasePath } from '../../utils/basePath';
+import { getClientBasePath, withBasePath } from '@/utils/basePath';
 
 export const CLIENT_BASE_PATH = getClientBasePath();
 export const API_BASE_PATH = withBasePath('/api', CLIENT_BASE_PATH);
