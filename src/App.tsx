@@ -1,4 +1,18 @@
 import { useEffect, useState } from 'react';
+import { AppShell } from './app/AppShell';
+import {
+  buildCompoundClassPath,
+  buildCompoundPath,
+  buildGenePath,
+  buildPathwayPath,
+  getActiveView,
+  getLegacyRedirectPath,
+  getViewPath,
+  parseRoute,
+  resolveAppPath,
+  type Route,
+  type View,
+} from './app/routes';
 import { CompoundExplorer } from './components/CompoundExplorer';
 import { CompoundClassExplorer } from './components/CompoundClassExplorer';
 import { CompoundDetail } from './components/CompoundDetail';
@@ -13,122 +27,6 @@ import { HomePage } from './components/HomePage';
 import { PathwayExplorer } from './components/PathwayExplorer';
 import { PathwayDetail } from './components/PathwayDetail';
 import { ToxicityExplorer } from './components/ToxicityExplorer';
-import { getClientBasePath, stripBasePath, withBasePath } from './utils/basePath';
-
-type View =
-  | 'home'
-  | 'faq'
-  | 'contact'
-  | 'database-metrics'
-  | 'compounds'
-  | 'compound-classes'
-  | 'genes'
-  | 'pathways'
-  | 'toxicity'
-  | 'guided-analysis';
-type Route =
-  | { kind: 'view'; view: View }
-  | { kind: 'compound'; cpd: string }
-  | { kind: 'gene'; ko: string }
-  | { kind: 'compoundClass'; compoundclass: string }
-  | { kind: 'pathway'; pathway: string; source?: string };
-
-const VIEW_PATHS: Record<View, string> = {
-  home: '/',
-  faq: '/faq',
-  contact: '/contact',
-  'database-metrics': '/database-metrics',
-  compounds: '/compounds',
-  'compound-classes': '/compound-classes',
-  genes: '/genes',
-  pathways: '/pathways',
-  toxicity: '/toxicity',
-  'guided-analysis': '/guided-analysis',
-};
-
-const CLIENT_BASE_PATH = getClientBasePath();
-
-function normalizePath(pathname: string) {
-  const cleaned = pathname.replace(/\/+$/, '');
-  return cleaned || '/';
-}
-
-function parseRoute(pathname: string): Route {
-  const path = normalizePath(stripBasePath(pathname, CLIENT_BASE_PATH));
-
-  if (path === '/' || path === '/home') {
-    return { kind: 'view', view: 'home' };
-  }
-  if (path === '/compounds') {
-    return { kind: 'view', view: 'compounds' };
-  }
-  if (path === '/faq') {
-    return { kind: 'view', view: 'faq' };
-  }
-  if (path === '/contact') {
-    return { kind: 'view', view: 'contact' };
-  }
-  if (path === '/database-metrics') {
-    return { kind: 'view', view: 'database-metrics' };
-  }
-  if (path === '/compound-classes') {
-    return { kind: 'view', view: 'compound-classes' };
-  }
-  if (path === '/genes') {
-    return { kind: 'view', view: 'genes' };
-  }
-  if (path.startsWith('/genes/')) {
-    const ko = decodeURIComponent(path.slice('/genes/'.length)).trim();
-    if (ko) {
-      return { kind: 'gene', ko: ko.toUpperCase() };
-    }
-  }
-  if (path === '/pathways') {
-    return { kind: 'view', view: 'pathways' };
-  }
-  if (path === '/toxicity') {
-    return { kind: 'view', view: 'toxicity' };
-  }
-  // Legacy alias: Visualizations has been deprecated in favor of Guided Analysis.
-  if (path === '/visualizations') {
-    return { kind: 'view', view: 'guided-analysis' };
-  }
-  if (path === '/guided-analysis') {
-    return { kind: 'view', view: 'guided-analysis' };
-  }
-  if (path.startsWith('/pathways/detail/')) {
-    const remainder = path.slice('/pathways/detail/'.length);
-    if (remainder) {
-      const segments = remainder.split('/').filter(Boolean);
-      if (segments.length >= 2) {
-        const source = decodeURIComponent(segments[0]).trim().toUpperCase();
-        const pathway = decodeURIComponent(segments.slice(1).join('/')).trim();
-        if (pathway) {
-          return { kind: 'pathway', pathway, source: source || undefined };
-        }
-      } else {
-        const pathway = decodeURIComponent(segments[0]).trim();
-        if (pathway) {
-          return { kind: 'pathway', pathway };
-        }
-      }
-    }
-  }
-  if (path.startsWith('/compound-classes/detail/')) {
-    const compoundclass = decodeURIComponent(path.slice('/compound-classes/detail/'.length)).trim();
-    if (compoundclass) {
-      return { kind: 'compoundClass', compoundclass };
-    }
-  }
-  if (path.startsWith('/compounds/')) {
-    const cpd = decodeURIComponent(path.slice('/compounds/'.length)).trim();
-    if (cpd) {
-      return { kind: 'compound', cpd: cpd.toUpperCase() };
-    }
-  }
-
-  return { kind: 'view', view: 'home' };
-}
 
 function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
@@ -145,16 +43,16 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const path = normalizePath(stripBasePath(window.location.pathname, CLIENT_BASE_PATH));
-    if (path === '/visualizations') {
-      window.history.replaceState(null, '', withBasePath('/guided-analysis', CLIENT_BASE_PATH));
+    const legacyRedirectPath = getLegacyRedirectPath(window.location.pathname);
+    if (legacyRedirectPath) {
+      window.history.replaceState(null, '', legacyRedirectPath);
       setRoute({ kind: 'view', view: 'guided-analysis' });
     }
   }, []);
 
   function navigate(path: string, replace = false) {
-    const target = normalizePath(withBasePath(path, CLIENT_BASE_PATH));
-    const current = normalizePath(window.location.pathname);
+    const target = resolveAppPath(path);
+    const current = resolveAppPath(window.location.pathname);
 
     if (target !== current) {
       if (replace) {
@@ -169,137 +67,87 @@ function App() {
   }
 
   function navigateToView(view: View) {
-    navigate(VIEW_PATHS[view]);
+    navigate(getViewPath(view));
   }
 
   function openCompoundDetail(cpd: string) {
-    navigate(`/compounds/${encodeURIComponent(cpd)}`);
+    navigate(buildCompoundPath(cpd));
   }
 
   function openGeneDetail(ko: string) {
-    navigate(`/genes/${encodeURIComponent(ko)}`);
+    navigate(buildGenePath(ko));
   }
 
   function openPathwayDetail(pathway: string, source?: string) {
-    const encodedPathway = encodeURIComponent(pathway.trim());
-    const normalizedSource = source?.trim().toUpperCase();
-    if (normalizedSource && normalizedSource !== 'ALL') {
-      navigate(`/pathways/detail/${encodeURIComponent(normalizedSource)}/${encodedPathway}`);
-      return;
-    }
-    navigate(`/pathways/detail/${encodedPathway}`);
+    navigate(buildPathwayPath(pathway, source));
   }
 
   function openCompoundClassDetail(compoundclass: string) {
-    navigate(`/compound-classes/detail/${encodeURIComponent(compoundclass.trim())}`);
+    navigate(buildCompoundClassPath(compoundclass));
+  }
+
+  function renderRouteContent() {
+    if (route.kind === 'view' && route.view === 'home') {
+      return <HomePage onNavigateToView={navigateToView} />;
+    }
+    if (route.kind === 'view' && route.view === 'faq') {
+      return <FaqPage onNavigateToView={navigateToView} />;
+    }
+    if (route.kind === 'view' && route.view === 'contact') {
+      return <ContactPage />;
+    }
+    if (route.kind === 'view' && route.view === 'database-metrics') {
+      return <DatabaseMetricsPage onBack={() => navigateToView('home')} />;
+    }
+    if (route.kind === 'view' && route.view === 'compounds') {
+      return <CompoundExplorer onCompoundSelect={openCompoundDetail} />;
+    }
+    if (route.kind === 'view' && route.view === 'compound-classes') {
+      return <CompoundClassExplorer onCompoundClassSelect={openCompoundClassDetail} />;
+    }
+    if (route.kind === 'view' && route.view === 'genes') {
+      return <GeneExplorer onGeneSelect={openGeneDetail} />;
+    }
+    if (route.kind === 'view' && route.view === 'pathways') {
+      return <PathwayExplorer onPathwaySelect={openPathwayDetail} />;
+    }
+    if (route.kind === 'view' && route.view === 'toxicity') {
+      return <ToxicityExplorer />;
+    }
+    if (route.kind === 'view' && route.view === 'guided-analysis') {
+      return <GuidedAnalysisPage onCompoundSelect={openCompoundDetail} />;
+    }
+    if (route.kind === 'compound') {
+      return <CompoundDetail cpd={route.cpd} onBack={() => navigateToView('compounds')} />;
+    }
+    if (route.kind === 'gene') {
+      return (
+        <GeneDetail
+          ko={route.ko}
+          onBack={() => navigateToView('genes')}
+          onCompoundSelect={openCompoundDetail}
+        />
+      );
+    }
+    if (route.kind === 'compoundClass') {
+      return (
+        <CompoundClassDetail
+          compoundclass={route.compoundclass}
+          onBack={() => navigateToView('compound-classes')}
+        />
+      );
+    }
+    if (route.kind === 'pathway') {
+      return <PathwayDetail pathway={route.pathway} source={route.source} onBack={() => navigateToView('pathways')} />;
+    }
+
+    return null;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <button
-                type="button"
-                onClick={() => navigateToView('home')}
-                className="flex items-center gap-3 text-left"
-              >
-                <img
-                  src={withBasePath('/BIOREMPP_LOGO.png', CLIENT_BASE_PATH)}
-                  alt="BioRemPP logo"
-                  className="w-9 h-9 rounded object-cover"
-                />
-                <h1 className="text-3xl font-bold text-gray-900">BioRemPP Database Explorer</h1>
-              </button>
-              <p className="text-sm text-gray-600 mt-1 ml-12">
-                Integrated bioremediation and toxicological data exploration
-              </p>
-            </div>
-            <div className="flex items-center gap-4 text-sm text-gray-600">
-              <button type="button" onClick={() => navigateToView('database-metrics')} className="hover:text-blue-700">
-                Database Metrics
-              </button>
-              <button type="button" onClick={() => navigateToView('guided-analysis')} className="hover:text-blue-700">
-                User Guide
-              </button>
-              <button type="button" onClick={() => navigateToView('faq')} className="hover:text-blue-700">
-                FAQ
-              </button>
-              <button type="button" onClick={() => navigateToView('contact')} className="hover:text-blue-700">
-                Contact
-              </button>
-              <button type="button" onClick={() => navigateToView('database-metrics')} className="hover:text-blue-700">
-                Documentation
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {route.kind === 'view' && route.view === 'home' && (
-          <HomePage onNavigateToView={navigateToView} />
-        )}
-        {route.kind === 'view' && route.view === 'faq' && (
-          <FaqPage onNavigateToView={navigateToView} />
-        )}
-        {route.kind === 'view' && route.view === 'contact' && <ContactPage />}
-        {route.kind === 'view' && route.view === 'database-metrics' && (
-          <DatabaseMetricsPage onBack={() => navigateToView('home')} />
-        )}
-        {route.kind === 'view' && route.view === 'compounds' && (
-          <CompoundExplorer onCompoundSelect={openCompoundDetail} />
-        )}
-        {route.kind === 'view' && route.view === 'compound-classes' && (
-          <CompoundClassExplorer onCompoundClassSelect={openCompoundClassDetail} />
-        )}
-        {route.kind === 'view' && route.view === 'genes' && (
-          <GeneExplorer onGeneSelect={openGeneDetail} />
-        )}
-        {route.kind === 'view' && route.view === 'pathways' && (
-          <PathwayExplorer onPathwaySelect={openPathwayDetail} />
-        )}
-        {route.kind === 'view' && route.view === 'toxicity' && <ToxicityExplorer />}
-        {route.kind === 'view' && route.view === 'guided-analysis' && (
-          <GuidedAnalysisPage onCompoundSelect={openCompoundDetail} />
-        )}
-        {route.kind === 'compound' && (
-          <CompoundDetail
-            cpd={route.cpd}
-            onBack={() => navigateToView('compounds')}
-          />
-        )}
-        {route.kind === 'gene' && (
-          <GeneDetail
-            ko={route.ko}
-            onBack={() => navigateToView('genes')}
-            onCompoundSelect={openCompoundDetail}
-          />
-        )}
-        {route.kind === 'compoundClass' && (
-          <CompoundClassDetail
-            compoundclass={route.compoundclass}
-            onBack={() => navigateToView('compound-classes')}
-          />
-        )}
-        {route.kind === 'pathway' && (
-          <PathwayDetail
-            pathway={route.pathway}
-            source={route.source}
-            onBack={() => navigateToView('pathways')}
-          />
-        )}
-      </main>
-
-      <footer className="bg-white border-t border-gray-200 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <p className="text-center text-sm text-gray-500">
-            BioRemPP Database Explorer - Integrating BioRemPP, HADEG, KEGG, and ToxCSM data
-          </p>
-        </div>
-      </footer>
-    </div>
+    <AppShell activeView={getActiveView(route)} onNavigateToView={navigateToView}>
+      {renderRouteContent()}
+    </AppShell>
   );
 }
 
