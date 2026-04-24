@@ -1,3 +1,46 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --color-canvas: 244 247 251;
+    --color-panel: 255 255 255;
+    --color-ink: 15 23 42;
+    --color-accent: 29 78 216;
+    --color-accent-soft: 219 234 254;
+  }
+
+  * {
+    @apply border-slate-200;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply min-h-screen bg-canvas text-slate-900 antialiased;
+    background-image:
+      radial-gradient(circle at top left, rgba(191, 219, 254, 0.34), transparent 26%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 251, 0.98));
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}
+
+@layer components {
+  .app-shell {
+    @apply min-h-screen bg-canvas;
+  }
+
+  .surface-section {
+    @apply rounded-3xl border border-slate-200/80 bg-white shadow-panel;
+  }
+
+  .surface-muted {
+    @apply rounded-2xl border border-slate-200 bg-slate-50/80;
+  }
+}
