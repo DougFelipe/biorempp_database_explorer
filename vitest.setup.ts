@@ -4,6 +4,16 @@ import { vi, beforeAll, afterAll } from 'vitest';
 // Stub Vite env variables used by the frontend (override per-test with vi.stubEnv)
 vi.stubEnv('VITE_BIOREMPP_URL_BASE_PATH', '/');
 
+Object.defineProperty(window, 'scrollTo', {
+  value: vi.fn(),
+  writable: true,
+});
+
+Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+  value: vi.fn(),
+  writable: true,
+});
+
 // Suppress noisy React warnings in test output.
 // Remove the filter below if you want to see all React warnings.
 const originalConsoleError = console.error;
