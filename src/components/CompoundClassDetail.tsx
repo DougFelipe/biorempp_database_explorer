@@ -1,26 +1,20 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { getCompoundClassDetailOverview } from '../services/api';
-import type { CompoundClassDetailOverviewResponse } from '../types/database';
-import { ChartCard } from './charts/ChartCard';
-import { HorizontalBarChart } from './charts/HorizontalBarChart';
-import { DonutChart } from './charts/DonutChart';
+import { getCompoundClassDetailOverview } from '@/services/api';
+import type { CompoundClassDetailOverviewResponse } from '@/types/database';
+import { ChartCard } from '@/components/charts/ChartCard';
+import { DonutChart } from '@/components/charts/DonutChart';
+import { HorizontalBarChart } from '@/components/charts/HorizontalBarChart';
+import { PathwayToxicityHeatmap } from '@/components/pathway-overview/PathwayToxicityHeatmap';
 import {
   toPathwayEcDonutSlices,
   toPathwayGeneBarItems,
   toPathwayKoBarItems,
-} from '../utils/pathwayOverviewAdapters';
-import { PathwayToxicityHeatmap } from './pathway-overview/PathwayToxicityHeatmap';
+} from '@/utils/pathwayOverviewAdapters';
+import { Card, DetailHeader, DetailStatusPanel, EntityStatStrip } from '@/shared/ui';
 
 interface CompoundClassDetailProps {
   compoundclass: string;
   onBack: () => void;
-}
-
-interface SummaryMetric {
-  label: string;
-  value: string;
-  hint?: string;
 }
 
 export function CompoundClassDetail({ compoundclass, onBack }: CompoundClassDetailProps) {
@@ -40,12 +34,12 @@ export function CompoundClassDetail({ compoundclass, onBack }: CompoundClassDeta
           return;
         }
         setOverview(data);
-      } catch (err) {
+      } catch (loadError) {
         if (cancelled) {
           return;
         }
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        setError(message);
+        setOverview(null);
+        setError(loadError instanceof Error ? loadError.message : 'Unknown error');
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -54,6 +48,7 @@ export function CompoundClassDetail({ compoundclass, onBack }: CompoundClassDeta
     }
 
     loadOverview();
+
     return () => {
       cancelled = true;
     };
@@ -61,96 +56,65 @@ export function CompoundClassDetail({ compoundclass, onBack }: CompoundClassDeta
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-        <p className="text-gray-600 text-center">Loading compound class overview...</p>
-      </div>
+      <DetailStatusPanel
+        status="loading"
+        title="Loading compound class overview"
+        message="Please wait while the compound class overview is prepared."
+      />
     );
   }
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-        <p className="text-red-600">Unable to load compound class overview.</p>
-        <p className="text-sm text-gray-600 mt-2">{error}</p>
-        <button onClick={onBack} className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg">
-          Back to Compound Classes
-        </button>
-      </div>
+      <DetailStatusPanel
+        status="error"
+        title="Unable to load compound class overview."
+        message={error}
+        onBack={onBack}
+        backLabel="Back to Compound Classes"
+      />
     );
   }
 
   if (!overview) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-        <p className="text-gray-600">Compound class not found.</p>
-        <button onClick={onBack} className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg">
-          Back to Compound Classes
-        </button>
-      </div>
+      <DetailStatusPanel
+        status="not-found"
+        title="Compound class not found."
+        message="The selected compound class could not be loaded."
+        onBack={onBack}
+        backLabel="Back to Compound Classes"
+      />
     );
   }
 
-  const summaryMetrics: SummaryMetric[] = [
-    {
-      label: 'KOs',
-      value: String(overview.summary.ko_count),
-      hint: 'distinct KOs',
-    },
-    {
-      label: 'Genes',
-      value: String(overview.summary.gene_count),
-      hint: 'associated genes',
-    },
-    {
-      label: 'Compounds',
-      value: String(overview.summary.compound_count),
-      hint: 'linked compounds',
-    },
-    {
-      label: 'Reactions',
-      value: String(overview.summary.reaction_ec_count),
-      hint: 'EC annotations',
-    },
-    {
-      label: 'Sources',
-      value: String(overview.summary.source_count),
-      hint: 'KEGG / HADEG / Class',
-    },
-    {
-      label: 'Toxicity Coverage',
-      value: overview.summary.toxicity_coverage_pct == null ? '-' : `${overview.summary.toxicity_coverage_pct}%`,
-      hint: 'compounds with ToxCSM',
-    },
-  ];
-
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
-        <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">{overview.compoundclass}</h2>
-            <p className="text-sm text-gray-500">BioRemPP compound class overview</p>
-          </div>
-        </div>
-      </div>
+    <Card className="overflow-hidden">
+      <DetailHeader
+        title={overview.compoundclass}
+        subtitle="BioRemPP compound class overview"
+        onBack={onBack}
+        backLabel="Back to Compound Classes"
+      />
 
-      <div className="px-6 py-5 bg-gray-50 border-b border-gray-200">
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          {summaryMetrics.map((metric) => (
-            <div key={metric.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{metric.label}</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{metric.value}</p>
-              {metric.hint ? <p className="text-xs text-gray-500 mt-1">{metric.hint}</p> : null}
-            </div>
-          ))}
-        </div>
-      </div>
+      <EntityStatStrip
+        gridClassName="xl:grid-cols-6"
+        items={[
+          { label: 'KOs', value: overview.summary.ko_count, hint: 'distinct KOs' },
+          { label: 'Genes', value: overview.summary.gene_count, hint: 'associated genes' },
+          { label: 'Compounds', value: overview.summary.compound_count, hint: 'linked compounds' },
+          { label: 'Reactions', value: overview.summary.reaction_ec_count, hint: 'EC annotations' },
+          { label: 'Sources', value: overview.summary.source_count, hint: 'KEGG / HADEG / Class' },
+          {
+            label: 'Toxicity Coverage',
+            value: overview.summary.toxicity_coverage_pct == null ? '-' : `${overview.summary.toxicity_coverage_pct}%`,
+            hint: 'compounds with ToxCSM',
+          },
+        ]}
+      />
 
-      <div className="p-6 space-y-4">
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div className="space-y-4 px-6 py-6">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <ChartCard title="KO Distribution" subtitle="Top KOs by linked compounds">
             <HorizontalBarChart
               items={toPathwayKoBarItems(overview.ko_distribution)}
@@ -176,6 +140,6 @@ export function CompoundClassDetail({ compoundclass, onBack }: CompoundClassDeta
 
         <PathwayToxicityHeatmap matrix={overview.toxicity_matrix} />
       </div>
-    </div>
+    </Card>
   );
 }
