@@ -1,8 +1,12 @@
 import { ChartCard } from '../charts/ChartCard';
-import { ChartLegend } from '../charts/ChartLegend';
 import type { ToxicityHeatmapDatum } from '../../types/database';
 import { riskBucketLabel, riskBucketToScore } from '../../utils/compoundOverviewAdapters';
 import { toToxicityFacets } from '../../utils/toxicityEndpointGroups';
+import {
+  ChartTooltip,
+  HeatmapLegend,
+  VisualizationEmptyState,
+} from '@/shared/visualization';
 
 interface ToxicityHeatmapOverviewProps {
   rows: ToxicityHeatmapDatum[];
@@ -65,40 +69,33 @@ export function ToxicityHeatmapOverview({ rows }: ToxicityHeatmapOverviewProps) 
   return (
     <ChartCard title="Toxicity Endpoints" subtitle="Unified domain heatmap with endpoint highlights">
       {flatEndpoints.length === 0 ? (
-        <p className="text-sm text-gray-500">No toxicity profile available.</p>
+        <VisualizationEmptyState message="No toxicity profile available." />
       ) : (
         <div className="space-y-3">
-          <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <ChartLegend
-                items={[
-                  { label: riskBucketLabel('high_risk'), color: '#fca5a5' },
-                  { label: riskBucketLabel('medium_risk'), color: '#fde68a' },
-                  { label: riskBucketLabel('low_risk'), color: '#86efac' },
-                ]}
-              />
-              <div className="text-[11px] text-gray-600 whitespace-nowrap">Prediction scale</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-gray-500">Low</span>
-              <div
-                className="h-2 flex-1 rounded border border-gray-200"
-                style={{ background: 'linear-gradient(90deg, hsl(24,100%,96%), hsl(24,100%,54%))' }}
-              />
-              <span className="text-[10px] text-gray-500">High</span>
-            </div>
-            <p className="text-xs text-gray-600">
-              Para mais informacoes, verifique o site oficial do ToxCSM:{' '}
-              <a
-                href="https://biosig.lab.uq.edu.au/toxcsm/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-700 hover:text-blue-800 underline"
-              >
-                biosig.lab.uq.edu.au/toxcsm
-              </a>
-            </p>
-          </div>
+          <HeatmapLegend
+            discreteItems={[
+              { label: riskBucketLabel('high_risk'), color: '#fca5a5' },
+              { label: riskBucketLabel('medium_risk'), color: '#fde68a' },
+              { label: riskBucketLabel('low_risk'), color: '#86efac' },
+            ]}
+            scaleLabel="Prediction scale"
+            gradient="linear-gradient(90deg, hsl(24,100%,96%), hsl(24,100%,54%))"
+            lowLabel="Low"
+            highLabel="High"
+            footer={
+              <>
+                Para mais informacoes, verifique o site oficial do ToxCSM:{' '}
+                <a
+                  href="https://biosig.lab.uq.edu.au/toxcsm/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-700 hover:text-blue-800 underline"
+                >
+                  biosig.lab.uq.edu.au/toxcsm
+                </a>
+              </>
+            }
+          />
 
           <div className="overflow-x-auto">
             <table className="min-w-[1024px] w-full table-fixed border-separate border-spacing-1">
@@ -153,15 +150,15 @@ export function ToxicityHeatmapOverview({ rows }: ToxicityHeatmapOverviewProps) 
                         key={`prediction-${endpoint.endpoint}`}
                         className="p-0"
                       >
-                        <div
-                          className="h-7 rounded border border-gray-200 flex items-center justify-center text-[10px] text-gray-700 font-medium"
-                          style={{ backgroundColor: predictionCellColor(endpoint.predictionValue) }}
-                          title={`${endpoint.fullLabel}: prediction=${
+                        <ChartTooltip
+                          content={`${endpoint.fullLabel}: prediction=${
                             endpoint.predictionValue === null ? '-' : endpoint.predictionValue.toFixed(4)
                           }`}
+                          className="h-7 rounded border border-gray-200 flex items-center justify-center text-[10px] text-gray-700 font-medium"
+                          style={{ backgroundColor: predictionCellColor(endpoint.predictionValue) }}
                         >
                           {endpoint.predictionValue === null ? '-' : endpoint.predictionValue.toFixed(2)}
-                        </div>
+                        </ChartTooltip>
                       </td>
                     );
                   })}
@@ -175,12 +172,12 @@ export function ToxicityHeatmapOverview({ rows }: ToxicityHeatmapOverviewProps) 
                         key={`risk-${endpoint.endpoint}`}
                         className="p-0"
                       >
-                        <div
-                          className="h-7 rounded border border-gray-200 flex items-center justify-center text-[10px] text-gray-700 font-semibold"
-                          style={{ backgroundColor: riskBucketColor(endpoint.riskBucket) }}
-                          title={`${endpoint.fullLabel}: ${riskText} (${
+                        <ChartTooltip
+                          content={`${endpoint.fullLabel}: ${riskText} (${
                             endpoint.riskLabel || 'no label'
                           }) | score=${riskBucketToScore(endpoint.riskBucket).toFixed(2)}`}
+                          className="h-7 rounded border border-gray-200 flex items-center justify-center text-[10px] text-gray-700 font-semibold"
+                          style={{ backgroundColor: riskBucketColor(endpoint.riskBucket) }}
                         />
                       </td>
                     );

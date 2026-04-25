@@ -1,3 +1,5 @@
+import { ChartTooltip, VisualizationEmptyState } from '@/shared/visualization';
+
 export interface HeatmapCell {
   x: string;
   y: string;
@@ -37,7 +39,7 @@ export function CategoricalHeatmap({
   getCellColor = defaultCellColor,
 }: CategoricalHeatmapProps) {
   if (xLabels.length === 0 || yLabels.length === 0 || cells.length === 0) {
-    return <p className="text-sm text-gray-500">{emptyMessage}</p>;
+    return <VisualizationEmptyState message={emptyMessage} />;
   }
 
   const min = Math.min(...cells.map((cell) => cell.value));
@@ -79,13 +81,13 @@ export function CategoricalHeatmap({
                 const color = getCellColor(cell, normalized);
                 return (
                   <td key={`${yLabel}|${xLabel}`} className="p-0">
-                    <div
+                    <ChartTooltip
+                      content={cell.tooltip || `${yLabel} x ${xLabel}: ${valueFormatter(cell.value)}`}
                       className="h-7 rounded border border-gray-100 text-[10px] text-gray-800 px-1 flex items-center justify-center"
                       style={{ backgroundColor: color }}
-                      title={cell.tooltip || `${yLabel} x ${xLabel}: ${valueFormatter(cell.value)}`}
                     >
                       {showValues ? cell.displayValue || valueFormatter(cell.value) : null}
-                    </div>
+                    </ChartTooltip>
                   </td>
                 );
               })}

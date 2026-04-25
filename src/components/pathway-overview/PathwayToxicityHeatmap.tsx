@@ -3,6 +3,11 @@ import type { ToxicityHeatmapDatum } from '../../types/database';
 import { ChartCard } from '../charts/ChartCard';
 import { formatEndpoint } from '../../utils/visualizationData';
 import { toToxicityFacets } from '../../utils/toxicityEndpointGroups';
+import {
+  ChartTooltip,
+  HeatmapLegend,
+  VisualizationEmptyState,
+} from '@/shared/visualization';
 
 interface PathwayToxicityHeatmapProps {
   matrix: PathwayToxicityMatrix;
@@ -86,7 +91,7 @@ export function PathwayToxicityHeatmap({
   if (endpointOrder.length === 0 || compounds.length === 0) {
     return (
       <ChartCard title={title} subtitle={`No toxicity data available for ${rowLabelPlural.toLowerCase()}.`}>
-        <p className="text-sm text-gray-500">No matrix data available.</p>
+        <VisualizationEmptyState message="No matrix data available." />
       </ChartCard>
     );
   }
@@ -98,14 +103,7 @@ export function PathwayToxicityHeatmap({
           Showing {compounds.length} of {rowsInScope} {rowLabelPlural.toLowerCase()}
         </p>
 
-        <div className="flex items-center gap-2 text-xs text-gray-600">
-          <span>Low</span>
-          <div
-            className="h-2 flex-1 rounded border border-gray-200"
-            style={{ background: 'linear-gradient(90deg, hsl(130,78%,86%), hsl(24,78%,56%))' }}
-          />
-          <span>High</span>
-        </div>
+        <HeatmapLegend />
 
         <div className="max-h-[480px] overflow-auto">
           <table
@@ -171,12 +169,12 @@ export function PathwayToxicityHeatmap({
                     const value = cell?.value ?? null;
                     return (
                       <td key={`${compound.cpd}|${endpoint}`} className="p-0">
-                        <div
-                          className="h-7 rounded border border-gray-100"
-                          style={{ backgroundColor: predictionCellColor(value) }}
-                          title={`${compound.compoundname || compound.cpd} | ${formatEndpoint(endpoint)}: ${
+                        <ChartTooltip
+                          content={`${compound.compoundname || compound.cpd} | ${formatEndpoint(endpoint)}: ${
                             value === null ? '-' : value.toFixed(4)
                           }`}
+                          className="h-7 rounded border border-gray-100"
+                          style={{ backgroundColor: predictionCellColor(value) }}
                         />
                       </td>
                     );

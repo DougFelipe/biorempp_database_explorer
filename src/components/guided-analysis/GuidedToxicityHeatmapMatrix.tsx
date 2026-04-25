@@ -2,6 +2,11 @@ import type { GuidedHeatmapMatrixVisualizationData } from '../../types/guided';
 import type { ToxicityHeatmapDatum } from '../../types/database';
 import { formatEndpoint } from '../../utils/visualizationData';
 import { toToxicityFacets } from '../../utils/toxicityEndpointGroups';
+import {
+  ChartTooltip,
+  HeatmapLegend,
+  VisualizationEmptyState,
+} from '@/shared/visualization';
 
 interface GuidedToxicityHeatmapMatrixProps {
   matrix: GuidedHeatmapMatrixVisualizationData;
@@ -54,7 +59,9 @@ export function GuidedToxicityHeatmapMatrix({ matrix }: GuidedToxicityHeatmapMat
   const minTableWidth = Math.max(760, 280 + endpointOrder.length * 52);
 
   if (endpointOrder.length === 0 || rows.length === 0) {
-    return <p className="text-sm text-gray-500">No toxicity matrix data available for this guided query.</p>;
+    return (
+      <VisualizationEmptyState message="No toxicity matrix data available for this guided query." />
+    );
   }
 
   return (
@@ -63,14 +70,7 @@ export function GuidedToxicityHeatmapMatrix({ matrix }: GuidedToxicityHeatmapMat
         Showing {rows.length} of {totalInScope} {rowLabelPlural.toLowerCase()}
       </p>
 
-      <div className="flex items-center gap-2 text-xs text-gray-600">
-        <span>Low</span>
-        <div
-          className="h-2 flex-1 rounded border border-gray-200"
-          style={{ background: 'linear-gradient(90deg, hsl(130,78%,86%), hsl(24,78%,56%))' }}
-        />
-        <span>High</span>
-      </div>
+      <HeatmapLegend />
 
       <div className="max-h-[560px] overflow-auto">
         <table
@@ -142,10 +142,10 @@ export function GuidedToxicityHeatmapMatrix({ matrix }: GuidedToxicityHeatmapMat
                   }${cell?.label ? ` (${cell.label})` : ''}`;
                   return (
                     <td key={`${row.id}|${endpoint}`} className="p-0">
-                      <div
+                      <ChartTooltip
+                        content={tooltip}
                         className="h-7 rounded border border-gray-100"
                         style={{ backgroundColor: predictionCellColor(value) }}
-                        title={tooltip}
                       />
                     </td>
                   );
