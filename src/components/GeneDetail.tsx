@@ -1,20 +1,29 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
 import {
+  getGeneAssociatedCompounds,
   getGeneByKo,
   getGeneDetailOverview,
-  getGeneAssociatedCompounds,
   getGeneMetadata,
-} from '../services/api';
+} from '@/services/api';
 import type {
-  GeneDetailSummary,
-  GeneDetailOverviewResponse,
   GeneAssociatedCompoundRow,
+  GeneDetailSummary,
   GeneMetadata,
-} from '../types/database';
-import { Pagination } from './Pagination';
-import { GeneMetadataPanel } from './GeneMetadataPanel';
-import { PathwayToxicityHeatmap } from './pathway-overview/PathwayToxicityHeatmap';
+} from '@/types/database';
+import { GeneMetadataPanel } from '@/components/GeneMetadataPanel';
+import { GeneOverviewTab } from '@/components/GeneOverviewTab';
+import { useLazyTabData } from '@/shared/hooks/useLazyTabData';
+import {
+  Card,
+  DetailHeader,
+  DetailStatusPanel,
+  EntityStatStrip,
+  EntityTableSection,
+  EntityTabs,
+  EntityTabsContent,
+  LazyTabPanel,
+  MetadataPanelShell,
+} from '@/shared/ui';
 
 interface GeneDetailProps {
   ko: string;
@@ -26,331 +35,256 @@ type GeneTab = 'overview' | 'compounds' | 'metadata';
 
 export function GeneDetail({ ko, onBack, onCompoundSelect }: GeneDetailProps) {
   const [summary, setSummary] = useState<GeneDetailSummary | null>(null);
-  const [overview, setOverview] = useState<GeneDetailOverviewResponse | null>(null);
   const [compounds, setCompounds] = useState<GeneAssociatedCompoundRow[]>([]);
-  const [metadata, setMetadata] = useState<GeneMetadata | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [compoundsLoading, setCompoundsLoading] = useState(true);
-  const [metadataLoading, setMetadataLoading] = useState(false);
-  const [overviewLoading, setOverviewLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<GeneTab>('overview');
   const [compoundPage, setCompoundPage] = useState(1);
   const [compoundTotalPages, setCompoundTotalPages] = useState(1);
-  const [compoundPageSize] = useState(25);
+  const compoundPageSize = 25;
+
+  const overviewState = useLazyTabData({
+    isActive: activeTab === 'overview',
+    fetcher: () => getGeneDetailOverview(ko),
+    resetKeys: [ko],
+  });
+
+  const metadataState = useLazyTabData<GeneMetadata>({
+    isActive: activeTab === 'metadata',
+    fetcher: () => getGeneMetadata(ko),
+    resetKeys: [ko],
+  });
 
   useEffect(() => {
     setActiveTab('overview');
     setCompoundPage(1);
-    setOverview(null);
-    setMetadata(null);
   }, [ko]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadSummary() {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await getGeneByKo(ko);
+        if (cancelled) {
+          return;
+        }
+        setSummary(response);
+      } catch (loadError) {
+        if (cancelled) {
+          return;
+        }
+        setSummary(null);
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load gene details.');
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
     loadSummary();
+
+    return () => {
+      cancelled = true;
+    };
   }, [ko]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadCompoundsPage() {
+      setCompoundsLoading(true);
+      try {
+        const response = await getGeneAssociatedCompounds(ko, { page: compoundPage, pageSize: compoundPageSize });
+        if (cancelled) {
+          return;
+        }
+        setCompounds(response.data);
+        setCompoundTotalPages(response.totalPages);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        setCompounds([]);
+        setCompoundTotalPages(1);
+      } finally {
+        if (!cancelled) {
+          setCompoundsLoading(false);
+        }
+      }
+    }
+
     loadCompoundsPage();
-  }, [ko, compoundPage]);
 
-  useEffect(() => {
-    if (activeTab !== 'metadata' || metadata) {
-      return;
-    }
-    loadMetadata();
-  }, [activeTab, ko, metadata]);
-
-  useEffect(() => {
-    if (activeTab !== 'overview' || overview) {
-      return;
-    }
-    loadOverview();
-  }, [activeTab, ko, overview]);
-
-  async function loadSummary() {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await getGeneByKo(ko);
-      setSummary(response);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadCompoundsPage() {
-    setCompoundsLoading(true);
-    try {
-      const response = await getGeneAssociatedCompounds(ko, { page: compoundPage, pageSize: compoundPageSize });
-      setCompounds(response.data);
-      setCompoundTotalPages(response.totalPages);
-    } catch (err) {
-      console.error('Error loading associated compounds:', err);
-      setCompounds([]);
-      setCompoundTotalPages(1);
-    } finally {
-      setCompoundsLoading(false);
-    }
-  }
-
-  async function loadMetadata() {
-    setMetadataLoading(true);
-    try {
-      const response = await getGeneMetadata(ko);
-      setMetadata(response);
-    } catch (err) {
-      console.error('Error loading gene metadata:', err);
-      setMetadata(null);
-    } finally {
-      setMetadataLoading(false);
-    }
-  }
-
-  async function loadOverview() {
-    setOverviewLoading(true);
-    try {
-      const response = await getGeneDetailOverview(ko);
-      setOverview(response);
-    } catch (err) {
-      console.error('Error loading gene overview:', err);
-      setOverview(null);
-    } finally {
-      setOverviewLoading(false);
-    }
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [compoundPage, ko]);
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-        <p className="text-gray-600 text-center">Loading gene details...</p>
-      </div>
+      <DetailStatusPanel
+        status="loading"
+        title="Loading gene details"
+        message="Please wait while the gene detail view is prepared."
+      />
     );
   }
 
-  if (error || !summary) {
+  if (error) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-        <p className="text-red-600">Gene not found.</p>
-        {error ? <p className="text-sm text-gray-600 mt-2">{error}</p> : null}
-        <button onClick={onBack} className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg">
-          Back to Genes
-        </button>
-      </div>
+      <DetailStatusPanel
+        status="error"
+        title="Unable to load gene details."
+        message={error}
+        onBack={onBack}
+        backLabel="Back to Genes"
+      />
+    );
+  }
+
+  if (!summary) {
+    return (
+      <DetailStatusPanel
+        status="not-found"
+        title="Gene not found."
+        message="The selected gene could not be loaded."
+        onBack={onBack}
+        backLabel="Back to Genes"
+      />
     );
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
-        <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">{summary.genesymbol || summary.ko}</h2>
-            <p className="text-sm text-gray-500">{summary.ko}</p>
-          </div>
-        </div>
-      </div>
+    <Card className="overflow-hidden">
+      <DetailHeader title={summary.genesymbol || summary.ko} subtitle={summary.ko} onBack={onBack} backLabel="Back to Genes" />
 
-      <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <p className="text-sm text-gray-500">Gene Symbol</p>
-            <p className="font-medium">{summary.genesymbol || '-'}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Gene Name</p>
-            <p className="font-medium">{summary.genename || '-'}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Linked Compounds</p>
-            <p className="font-medium">{summary.compound_count}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Pathway Annotations</p>
-            <p className="font-medium">{summary.pathway_count}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Compound Classes</p>
-            <p className="font-medium">{summary.compound_class_count}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Reference Agencies</p>
-            <p className="font-medium">{summary.reference_agency_count}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Toxicity Coverage</p>
-            <p className="font-medium">
-              {summary.toxicity_coverage_pct == null ? '-' : `${summary.toxicity_coverage_pct}%`}
-            </p>
-          </div>
-        </div>
-      </div>
+      <EntityStatStrip
+        items={[
+          { label: 'Gene Symbol', value: summary.genesymbol || '-' },
+          { label: 'Gene Name', value: summary.genename || '-' },
+          { label: 'Linked Compounds', value: summary.compound_count },
+          { label: 'Pathway Annotations', value: summary.pathway_count },
+          { label: 'Compound Classes', value: summary.compound_class_count },
+          { label: 'Reference Agencies', value: summary.reference_agency_count },
+          {
+            label: 'Toxicity Coverage',
+            value: summary.toxicity_coverage_pct == null ? '-' : `${summary.toxicity_coverage_pct}%`,
+          },
+        ]}
+      />
 
-      <div className="border-b border-gray-200">
-        <div className="flex gap-4 px-6">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`py-3 px-4 border-b-2 font-medium text-sm ${
-              activeTab === 'overview'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+      <EntityTabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        tabs={[
+          { value: 'overview', label: 'Overview' },
+          { value: 'compounds', label: 'Associated Compounds', count: summary.compound_count },
+          { value: 'metadata', label: 'Metadata' },
+        ]}
+      >
+        <EntityTabsContent value="overview">
+          <LazyTabPanel
+            state={overviewState}
+            loadingTitle="Loading overview"
+            loadingMessage="Please wait while the gene overview is prepared."
+            emptyTitle="Overview unavailable"
+            emptyMessage="Overview data unavailable for this gene."
+            errorTitle="Unable to load overview."
           >
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('compounds')}
-            className={`py-3 px-4 border-b-2 font-medium text-sm ${
-              activeTab === 'compounds'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+            {(overview) => <GeneOverviewTab overview={overview} />}
+          </LazyTabPanel>
+        </EntityTabsContent>
+
+        <EntityTabsContent value="compounds">
+          <EntityTableSection
+            rows={compounds}
+            loading={compoundsLoading}
+            getRowKey={(compound) => compound.cpd}
+            emptyTitle="No compounds associated"
+            emptyMessage="No compounds associated with this gene."
+            onRowClick={(compound) => onCompoundSelect(compound.cpd)}
+            pagination={{
+              currentPage: compoundPage,
+              totalPages: compoundTotalPages,
+              onPageChange: setCompoundPage,
+            }}
+            columns={[
+              {
+                key: 'cpd',
+                header: 'Compound ID',
+                cellClassName: 'font-medium text-blue-700',
+                render: (compound) => compound.cpd,
+              },
+              {
+                key: 'compoundname',
+                header: 'Name',
+                render: (compound) => compound.compoundname || '-',
+              },
+              {
+                key: 'compoundclass',
+                header: 'Class',
+                render: (compound) => compound.compoundclass || '-',
+              },
+              {
+                key: 'ko_count',
+                header: 'KO Count',
+                render: (compound) => compound.ko_count,
+              },
+              {
+                key: 'gene_count',
+                header: 'Gene Count',
+                render: (compound) => compound.gene_count,
+              },
+              {
+                key: 'pathway_count',
+                header: 'Pathway Annotations',
+                render: (compound) => compound.pathway_count,
+              },
+              {
+                key: 'toxicity_risk_mean',
+                header: 'Toxicity Risk Mean',
+                render: (compound) =>
+                  compound.toxicity_risk_mean == null ? '-' : compound.toxicity_risk_mean.toFixed(2),
+              },
+              {
+                key: 'high_risk_endpoint_count',
+                header: 'High Risk Endpoints',
+                render: (compound) => compound.high_risk_endpoint_count,
+              },
+              {
+                key: 'reference_count',
+                header: 'References',
+                render: (compound) => compound.reference_count,
+              },
+            ]}
+          />
+        </EntityTabsContent>
+
+        <EntityTabsContent value="metadata">
+          <LazyTabPanel
+            state={metadataState}
+            loadingTitle="Loading metadata"
+            loadingMessage="Please wait while the gene metadata is prepared."
+            emptyTitle="Metadata unavailable"
+            emptyMessage="Metadata unavailable for this gene."
+            errorTitle="Unable to load metadata."
           >
-            Associated Compounds ({summary.compound_count})
-          </button>
-          <button
-            onClick={() => setActiveTab('metadata')}
-            className={`py-3 px-4 border-b-2 font-medium text-sm ${
-              activeTab === 'metadata'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Metadata
-          </button>
-        </div>
-      </div>
-
-      <div className="p-6">
-        {activeTab === 'overview' && (
-          <div className="space-y-4">
-            {overviewLoading ? (
-              <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                <p className="text-sm text-gray-600">Loading overview...</p>
-              </div>
-            ) : overview ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
-                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Linked Compounds</p>
-                    <p className="text-xl font-semibold text-gray-900 mt-1">{overview.summary.linked_compounds_total}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
-                    <p className="text-xs uppercase tracking-wide text-gray-500">With Toxicity</p>
-                    <p className="text-xl font-semibold text-gray-900 mt-1">{overview.summary.toxicity_compounds}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Excluded (No ToxCSM)</p>
-                    <p className="text-xl font-semibold text-gray-900 mt-1">{overview.summary.excluded_no_toxicity}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Endpoints</p>
-                    <p className="text-xl font-semibold text-gray-900 mt-1">{overview.summary.endpoint_count}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Toxicity Coverage</p>
-                    <p className="text-xl font-semibold text-gray-900 mt-1">
-                      {overview.summary.toxicity_coverage_pct == null ? '-' : `${overview.summary.toxicity_coverage_pct}%`}
-                    </p>
-                  </div>
-                </div>
-
-                <PathwayToxicityHeatmap
-                  matrix={overview.toxicity_matrix}
-                  title="Toxicity Heatmap"
-                  subtitle="Compounds on Y-axis and grouped endpoints on top"
-                  rowLabel="Compound"
-                  rowLabelPlural="linked compounds"
-                  rowSort="provided"
-                  totalRowsInScope={overview.summary.linked_compounds_total}
-                />
-              </>
-            ) : (
-              <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                <p className="text-sm text-gray-600">Overview data unavailable for this gene.</p>
-              </div>
+            {(metadata) => (
+              <MetadataPanelShell
+                title="Gene metadata"
+                description="Identifiers, interoperability and quantitative overview for the selected gene."
+              >
+                <GeneMetadataPanel metadata={metadata} />
+              </MetadataPanelShell>
             )}
-          </div>
-        )}
-
-        {activeTab === 'compounds' && (
-          <div className="space-y-4">
-            {compoundsLoading ? (
-              <p className="text-gray-500 text-center py-4">Loading associated compounds...</p>
-            ) : compounds.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No compounds associated with this gene.</p>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Compound ID</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">KO Count</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Gene Count</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pathway Annotations</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Toxicity Risk Mean</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">High Risk Endpoints</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">References</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {compounds.map((compound) => (
-                        <tr
-                          key={compound.cpd}
-                          onClick={() => onCompoundSelect(compound.cpd)}
-                          className="hover:bg-blue-50 cursor-pointer transition-colors"
-                        >
-                          <td className="px-4 py-2 text-sm font-medium text-blue-600">{compound.cpd}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{compound.compoundname || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-500">{compound.compoundclass || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-500">{compound.ko_count}</td>
-                          <td className="px-4 py-2 text-sm text-gray-500">{compound.gene_count}</td>
-                          <td className="px-4 py-2 text-sm text-gray-500">{compound.pathway_count}</td>
-                          <td className="px-4 py-2 text-sm text-gray-500">
-                            {compound.toxicity_risk_mean == null ? '-' : compound.toxicity_risk_mean.toFixed(2)}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-500">{compound.high_risk_endpoint_count}</td>
-                          <td className="px-4 py-2 text-sm text-gray-500" title={compound.reference_ag || 'No reference annotation'}>
-                            {compound.reference_count}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {compoundTotalPages > 1 && (
-                  <Pagination
-                    currentPage={compoundPage}
-                    totalPages={compoundTotalPages}
-                    onPageChange={setCompoundPage}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'metadata' && (
-          <div className="space-y-6">
-            {metadataLoading ? (
-              <p className="text-gray-500 text-center py-4">Loading metadata...</p>
-            ) : metadata ? (
-              <GeneMetadataPanel metadata={metadata} />
-            ) : (
-              <p className="text-gray-500 text-center py-4">Metadata unavailable for this gene.</p>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+          </LazyTabPanel>
+        </EntityTabsContent>
+      </EntityTabs>
+    </Card>
   );
 }
