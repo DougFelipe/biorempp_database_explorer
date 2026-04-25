@@ -1,392 +1,131 @@
-import { useEffect, useMemo, useState } from 'react';
-import { executeGuidedQuery, getGuidedCatalog, getGuidedQueryOptions } from '../services/api';
-import type {
-  GuidedCatalogResponse,
-  GuidedExecutionResponse,
-  GuidedFilterDefinition,
-  GuidedFilterState,
-  GuidedFilterValue,
-  GuidedQueryDefinition,
-} from '../types/guided';
-import { GuidedFiltersBar } from './guided-analysis/GuidedFiltersBar';
-import { GuidedInsightPanel } from './guided-analysis/GuidedInsightPanel';
-import { QuerySelectorPanel } from './guided-analysis/QuerySelectorPanel';
-import { GuidedResultTable } from './guided-analysis/GuidedResultTable';
-import { GuidedSummaryCards } from './guided-analysis/GuidedSummaryCards';
-import { UseCaseDescriptionAccordion } from './guided-analysis/UseCaseDescriptionAccordion';
-import { UseCaseMethodsModal } from './guided-analysis/UseCaseMethodsModal';
-import { UseCaseQueryRecipesModal } from './guided-analysis/UseCaseQueryRecipesModal';
-import { VisualizationRendererRegistry } from './guided-analysis/VisualizationRendererRegistry';
-import { getGuidedQueryRecipe } from '../config/guidedQueryRecipes';
+import { useEffect, useMemo } from 'react';
+import { QuerySelectorPanel } from '@/components/guided-analysis/QuerySelectorPanel';
+import { getGuidedQueryRecipe } from '@/config/guidedQueryRecipes';
+import { GuidedAnalysisLayout } from '@/features/guided-analysis/components/GuidedAnalysisLayout';
+import { GuidedDialogs } from '@/features/guided-analysis/components/GuidedDialogs';
+import { GuidedFiltersPanel } from '@/features/guided-analysis/components/GuidedFiltersPanel';
+import { GuidedQueryHeader } from '@/features/guided-analysis/components/GuidedQueryHeader';
+import { GuidedResultsSection } from '@/features/guided-analysis/components/GuidedResultsSection';
+import { useGuidedCatalog } from '@/features/guided-analysis/hooks/useGuidedCatalog';
+import { useGuidedExecution } from '@/features/guided-analysis/hooks/useGuidedExecution';
+import { useGuidedFilterState } from '@/features/guided-analysis/hooks/useGuidedFilterState';
+import { useGuidedQueryOptions } from '@/features/guided-analysis/hooks/useGuidedQueryOptions';
+import { useGuidedQuerySelection } from '@/features/guided-analysis/hooks/useGuidedQuerySelection';
+import { sanitizeFilterStateForOptions } from '@/features/guided-analysis/utils';
+import { EmptyState, ErrorState, LoadingState } from '@/shared/feedback';
 
 interface GuidedAnalysisPageProps {
   onCompoundSelect: (cpd: string) => void;
 }
 
-function toDefaultFilterValue(filter: GuidedFilterDefinition, rawValue: unknown): GuidedFilterValue {
-  if (filter.type === 'toggle') {
-    return rawValue === true || rawValue === 'true' || rawValue === 1 || rawValue === '1';
-  }
-
-  if (filter.type === 'number_range') {
-    if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
-      return {};
-    }
-    const rawRange = rawValue as { min?: unknown; max?: unknown };
-    const min = typeof rawRange.min === 'number' ? rawRange.min : undefined;
-    const max = typeof rawRange.max === 'number' ? rawRange.max : undefined;
-    return { min, max };
-  }
-
-  if (typeof rawValue === 'string') {
-    return rawValue;
-  }
-
-  return '';
-}
-
-function buildDefaultFilterState(query: GuidedQueryDefinition | null): GuidedFilterState {
-  if (!query) {
-    return {};
-  }
-
-  const defaults = (query.defaults?.filters || {}) as Record<string, unknown>;
-  const state: GuidedFilterState = {};
-
-  for (const filter of query.filters) {
-    state[filter.id] = toDefaultFilterValue(filter, defaults[filter.id]);
-  }
-
-  return state;
-}
-
-function getQueryPageSize(query: GuidedQueryDefinition | null) {
-  if (!query) {
-    return 10;
-  }
-  const fromDefaults = Number(query.defaults?.page_size);
-  if (!Number.isFinite(fromDefaults) || fromDefaults <= 0) {
-    return 10;
-  }
-  return Math.min(200, Math.max(1, Math.trunc(fromDefaults)));
-}
-
-function serializeFiltersForOptions(filters: GuidedFilterState) {
-  const serialized: Record<string, string> = {};
-  for (const [key, value] of Object.entries(filters)) {
-    if (typeof value === 'string' && value.trim() !== '') {
-      serialized[key] = value;
-      continue;
-    }
-    if (typeof value === 'boolean') {
-      serialized[key] = value ? 'true' : 'false';
-    }
-  }
-  return serialized;
-}
-
-function serializeFiltersForExecute(filters: GuidedFilterState) {
-  const serialized: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(filters)) {
-    if (typeof value === 'string') {
-      if (value.trim() !== '') {
-        serialized[key] = value.trim();
-      }
-      continue;
-    }
-    if (typeof value === 'boolean') {
-      if (value) {
-        serialized[key] = value;
-      }
-      continue;
-    }
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const min = typeof value.min === 'number' ? value.min : undefined;
-      const max = typeof value.max === 'number' ? value.max : undefined;
-      if (min !== undefined || max !== undefined) {
-        serialized[key] = { min, max };
-      }
-    }
-  }
-  return serialized;
-}
-
-function shouldValidateOptions(filter: GuidedFilterDefinition) {
-  return filter.type === 'select' || filter.type === 'dependent_select';
-}
-
 export function GuidedAnalysisPage({ onCompoundSelect }: GuidedAnalysisPageProps) {
-  const [catalog, setCatalog] = useState<GuidedCatalogResponse | null>(null);
-  const [catalogLoading, setCatalogLoading] = useState(true);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [selectedQueryId, setSelectedQueryId] = useState<string>('');
-  const [filters, setFilters] = useState<GuidedFilterState>({});
-  const [optionsByFilter, setOptionsByFilter] = useState<Record<string, Array<{ value: string; label: string }>>>({});
-  const [page, setPage] = useState(1);
-  const [executionLoading, setExecutionLoading] = useState(false);
-  const [executionError, setExecutionError] = useState<string | null>(null);
-  const [execution, setExecution] = useState<GuidedExecutionResponse | null>(null);
+  const { catalog, catalogLoading, catalogError, reload } = useGuidedCatalog();
+  const { selectedQueryId, setSelectedQueryId, selectedQuery } = useGuidedQuerySelection(catalog);
 
-  const selectedQuery = useMemo(
-    () => catalog?.queries.find((query) => query.id === selectedQueryId) || null,
-    [catalog, selectedQueryId]
-  );
+  const {
+    filters,
+    isReady: filterStateReady,
+    replaceFilters,
+    handleFilterChange,
+    handleResetFilters,
+  } = useGuidedFilterState({ query: selectedQuery });
+
+  const shouldLoadOptions = Boolean(selectedQuery) && filterStateReady;
+  const {
+    optionsByFilter,
+    optionsError,
+    optionsReadyForQueryId,
+  } = useGuidedQueryOptions(selectedQuery, filters, shouldLoadOptions);
+
+  const effectiveFilters = useMemo(() => {
+    if (!selectedQuery || optionsReadyForQueryId !== selectedQuery.id) {
+      return filters;
+    }
+
+    return sanitizeFilterStateForOptions(selectedQuery, filters, optionsByFilter);
+  }, [filters, optionsByFilter, optionsReadyForQueryId, selectedQuery]);
+
+  useEffect(() => {
+    if (effectiveFilters !== filters) {
+      replaceFilters(effectiveFilters);
+    }
+  }, [effectiveFilters, filters, replaceFilters]);
+
+  const canExecute = Boolean(selectedQuery) &&
+    filterStateReady &&
+    optionsReadyForQueryId === selectedQuery?.id;
+
+  const {
+    execution,
+    executionLoading,
+    executionError,
+    setPage,
+  } = useGuidedExecution(selectedQuery, effectiveFilters, canExecute);
+
   const selectedRecipe = useMemo(
     () => (selectedQuery ? getGuidedQueryRecipe(selectedQuery.id) : undefined),
     [selectedQuery]
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadCatalog() {
-      setCatalogLoading(true);
-      setCatalogError(null);
-      try {
-        const response = await getGuidedCatalog();
-        if (cancelled) {
-          return;
-        }
-        setCatalog(response);
-        setSelectedQueryId(response.queries[0]?.id || '');
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        setCatalogError(error instanceof Error ? error.message : 'Unable to load guided catalog.');
-      } finally {
-        if (!cancelled) {
-          setCatalogLoading(false);
-        }
-      }
-    }
-    loadCatalog();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    setFilters(buildDefaultFilterState(selectedQuery));
-    setPage(1);
-  }, [selectedQueryId, selectedQuery]);
-
-  useEffect(() => {
-    if (!selectedQuery) {
-      return;
-    }
-    const activeQuery = selectedQuery;
-
-    let cancelled = false;
-    async function loadOptions() {
-      try {
-        const response = await getGuidedQueryOptions(activeQuery.id, serializeFiltersForOptions(filters));
-        if (cancelled) {
-          return;
-        }
-        setOptionsByFilter(response.options);
-      } catch {
-        if (!cancelled) {
-          setOptionsByFilter({});
-        }
-      }
-    }
-    loadOptions();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedQuery, filters]);
-
-  useEffect(() => {
-    if (!selectedQuery) {
-      return;
-    }
-
-    setFilters((current) => {
-      let changed = false;
-      const next = { ...current };
-
-      for (const filter of selectedQuery.filters) {
-        if (!shouldValidateOptions(filter)) {
-          continue;
-        }
-        const options = optionsByFilter[filter.id] || [];
-        const currentValue = typeof current[filter.id] === 'string' ? current[filter.id] : '';
-        if (!currentValue) {
-          continue;
-        }
-        const exists = options.some((option) => option.value === currentValue);
-        if (!exists) {
-          if (filter.type === 'dependent_select') {
-            next[filter.id] = options[0]?.value || '';
-          } else {
-            next[filter.id] = '';
-          }
-          changed = true;
-        }
-      }
-
-      return changed ? next : current;
-    });
-  }, [selectedQuery, optionsByFilter]);
-
-  useEffect(() => {
-    if (!selectedQuery) {
-      return;
-    }
-    const activeQuery = selectedQuery;
-
-    let cancelled = false;
-    async function runExecution() {
-      setExecutionLoading(true);
-      setExecutionError(null);
-      try {
-        const response = await executeGuidedQuery(activeQuery.id, {
-          page,
-          pageSize: getQueryPageSize(activeQuery),
-          filters: serializeFiltersForExecute(filters),
-        });
-        if (cancelled) {
-          return;
-        }
-        setExecution(response);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        setExecutionError(error instanceof Error ? error.message : 'Unable to execute guided query.');
-        setExecution(null);
-      } finally {
-        if (!cancelled) {
-          setExecutionLoading(false);
-        }
-      }
-    }
-    runExecution();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedQuery, filters, page]);
-
-  useEffect(() => {
-    if (!execution?.table) {
-      return;
-    }
-    if (page > execution.table.totalPages) {
-      setPage(execution.table.totalPages);
-    }
-  }, [execution, page]);
-
-  function handleFilterChange(filterId: string, value: GuidedFilterValue) {
-    setFilters((current) => ({
-      ...current,
-      [filterId]: value,
-    }));
-    setPage(1);
-  }
-
-  function handleResetFilters() {
-    setFilters(buildDefaultFilterState(selectedQuery));
-    setPage(1);
-  }
-
   if (catalogLoading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500">
-        Loading guided analysis catalog...
-      </div>
+      <LoadingState
+        title="Loading guided analysis catalog..."
+        message="Preparing guided queries and filter defaults."
+      />
     );
   }
 
   if (catalogError) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 text-red-700">
-        Unable to load guided analysis catalog: {catalogError}
-      </div>
+      <ErrorState
+        title="Unable to load guided analysis catalog"
+        message={catalogError}
+        actionLabel="Retry"
+        onAction={reload}
+      />
     );
   }
 
   if (!catalog || !selectedQuery) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-gray-500">
-        No guided queries available.
-      </div>
+      <EmptyState
+        title="No guided queries available"
+        message="The guided analysis catalog did not return any use cases."
+      />
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-2xl font-bold text-gray-900">{catalog.title}</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Declarative guided use cases executed server-side with SQLite.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 items-start lg:grid-cols-[280px_minmax(0,1fr)] gap-6">
+    <GuidedAnalysisLayout
+      title={catalog.title}
+      description="Declarative guided use cases executed server-side with SQLite."
+      sidebar={
         <QuerySelectorPanel
           categories={catalog.categories}
           queries={catalog.queries}
-          selectedId={selectedQuery.id}
+          selectedId={selectedQueryId}
           onSelect={setSelectedQueryId}
         />
-
-        <div className="space-y-4 min-w-0">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-3">
-            <h3 className="text-xl font-semibold text-gray-900">{selectedQuery.title}</h3>
-            <p className="text-sm text-gray-500">
-              Dataset: {selectedQuery.dataset}
-              {execution?.meta?.execution_ms !== undefined ? ` | execution ${execution.meta.execution_ms} ms` : ''}
-              {execution?.meta?.threshold_basis ? ` | thresholds: ${execution.meta.threshold_basis}` : ''}
-              {execution?.meta?.x_threshold !== undefined && execution?.meta?.y_threshold !== undefined
-                ? ` (x=${execution.meta.x_threshold}, y=${execution.meta.y_threshold})`
-                : ''}
-            </p>
-            <GuidedSummaryCards cards={execution?.summary_cards || []} />
-            <GuidedInsightPanel insights={execution?.insights || []} />
-          </div>
-
-          <UseCaseDescriptionAccordion
-            content={selectedQuery.use_case_description}
-            headerAction={
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <UseCaseMethodsModal content={selectedQuery.methods_modal} />
-                {selectedRecipe ? <UseCaseQueryRecipesModal content={selectedRecipe} /> : null}
-              </div>
-            }
-          />
-
-          <GuidedFiltersBar
-            filters={selectedQuery.filters}
-            values={filters}
-            optionsByFilter={optionsByFilter}
-            onChange={handleFilterChange}
-            onReset={handleResetFilters}
-          />
-
-          {!execution && executionLoading ? (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500">
-              Executing query...
-            </div>
-          ) : executionError ? (
-            <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 text-red-700">
-              Unable to execute guided query: {executionError}
-            </div>
-          ) : execution ? (
-            <>
-              {executionLoading ? (
-                <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-4 py-2 text-sm">
-                  Refreshing results...
-                </div>
-              ) : null}
-              <VisualizationRendererRegistry
-                visualizations={execution.visualizations}
-                onCompoundSelect={onCompoundSelect}
-              />
-              <GuidedResultTable table={execution.table} onCompoundSelect={onCompoundSelect} onPageChange={setPage} />
-            </>
-          ) : null}
-        </div>
-      </div>
-    </div>
+      }
+    >
+      <GuidedQueryHeader query={selectedQuery} execution={execution} />
+      <GuidedDialogs query={selectedQuery} recipe={selectedRecipe} />
+      <GuidedFiltersPanel
+        query={selectedQuery}
+        values={effectiveFilters}
+        optionsByFilter={optionsByFilter}
+        optionsError={optionsError}
+        onChange={handleFilterChange}
+        onReset={handleResetFilters}
+      />
+      <GuidedResultsSection
+        execution={execution}
+        executionLoading={executionLoading}
+        executionError={executionError}
+        onCompoundSelect={onCompoundSelect}
+        onPageChange={setPage}
+      />
+    </GuidedAnalysisLayout>
   );
 }
