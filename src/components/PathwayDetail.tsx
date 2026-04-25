@@ -1,27 +1,21 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { getPathwayDetailOverview } from '../services/api';
-import type { PathwayDetailOverviewResponse } from '../types/database';
-import { ChartCard } from './charts/ChartCard';
-import { HorizontalBarChart } from './charts/HorizontalBarChart';
-import { DonutChart } from './charts/DonutChart';
+import { getPathwayDetailOverview } from '@/services/api';
+import type { PathwayDetailOverviewResponse } from '@/types/database';
+import { ChartCard } from '@/components/charts/ChartCard';
+import { DonutChart } from '@/components/charts/DonutChart';
+import { HorizontalBarChart } from '@/components/charts/HorizontalBarChart';
+import { PathwayToxicityHeatmap } from '@/components/pathway-overview/PathwayToxicityHeatmap';
 import {
   toPathwayEcDonutSlices,
   toPathwayGeneBarItems,
   toPathwayKoBarItems,
-} from '../utils/pathwayOverviewAdapters';
-import { PathwayToxicityHeatmap } from './pathway-overview/PathwayToxicityHeatmap';
+} from '@/utils/pathwayOverviewAdapters';
+import { Card, DetailHeader, DetailStatusPanel, EntityStatStrip } from '@/shared/ui';
 
 interface PathwayDetailProps {
   pathway: string;
   source?: string;
   onBack: () => void;
-}
-
-interface SummaryMetric {
-  label: string;
-  value: string;
-  hint?: string;
 }
 
 export function PathwayDetail({ pathway, source, onBack }: PathwayDetailProps) {
@@ -41,12 +35,12 @@ export function PathwayDetail({ pathway, source, onBack }: PathwayDetailProps) {
           return;
         }
         setOverview(data);
-      } catch (err) {
+      } catch (loadError) {
         if (cancelled) {
           return;
         }
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        setError(message);
+        setOverview(null);
+        setError(loadError instanceof Error ? loadError.message : 'Unknown error');
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -55,6 +49,7 @@ export function PathwayDetail({ pathway, source, onBack }: PathwayDetailProps) {
     }
 
     loadOverview();
+
     return () => {
       cancelled = true;
     };
@@ -62,101 +57,69 @@ export function PathwayDetail({ pathway, source, onBack }: PathwayDetailProps) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-        <p className="text-gray-600 text-center">Loading pathway overview...</p>
-      </div>
+      <DetailStatusPanel
+        status="loading"
+        title="Loading pathway overview"
+        message="Please wait while the pathway overview is prepared."
+      />
     );
   }
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-        <p className="text-red-600">Unable to load pathway overview.</p>
-        <p className="text-sm text-gray-600 mt-2">{error}</p>
-        <button onClick={onBack} className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg">
-          Back to Pathways
-        </button>
-      </div>
+      <DetailStatusPanel
+        status="error"
+        title="Unable to load pathway overview."
+        message={error}
+        onBack={onBack}
+        backLabel="Back to Pathways"
+      />
     );
   }
 
   if (!overview) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-        <p className="text-gray-600">Pathway not found.</p>
-        <button onClick={onBack} className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg">
-          Back to Pathways
-        </button>
-      </div>
+      <DetailStatusPanel
+        status="not-found"
+        title="Pathway not found."
+        message="The selected pathway could not be loaded."
+        onBack={onBack}
+        backLabel="Back to Pathways"
+      />
     );
   }
 
-  const summaryMetrics: SummaryMetric[] = [
-    {
-      label: 'KOs',
-      value: String(overview.summary.ko_count),
-      hint: 'distinct KOs',
-    },
-    {
-      label: 'Genes',
-      value: String(overview.summary.gene_count),
-      hint: 'associated genes',
-    },
-    {
-      label: 'Compounds',
-      value: String(overview.summary.compound_count),
-      hint: 'linked compounds',
-    },
-    {
-      label: 'Reactions',
-      value: String(overview.summary.reaction_ec_count),
-      hint: 'EC annotations',
-    },
-    {
-      label: 'Sources',
-      value: String(overview.summary.source_count),
-      hint: overview.selected_source === 'ALL' ? 'KEGG + HADEG' : overview.selected_source,
-    },
-    {
-      label: 'Coverage',
-      value: overview.summary.ko_overlap_pct == null ? '-' : `${overview.summary.ko_overlap_pct}%`,
-      hint: 'KO overlap',
-    },
-  ];
-
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="p-2 hover:bg-gray-100 rounded-lg"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">{overview.pathway}</h2>
-            <p className="text-sm text-gray-500">
-              Source scope: {overview.selected_source === 'ALL' ? 'All sources' : overview.selected_source}
-            </p>
-          </div>
-        </div>
-      </div>
+    <Card className="overflow-hidden">
+      <DetailHeader
+        title={overview.pathway}
+        subtitle={`Source scope: ${overview.selected_source === 'ALL' ? 'All sources' : overview.selected_source}`}
+        onBack={onBack}
+        backLabel="Back to Pathways"
+      />
 
-      <div className="px-6 py-5 bg-gray-50 border-b border-gray-200">
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          {summaryMetrics.map((metric) => (
-            <div key={metric.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{metric.label}</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{metric.value}</p>
-              {metric.hint ? <p className="text-xs text-gray-500 mt-1">{metric.hint}</p> : null}
-            </div>
-          ))}
-        </div>
-      </div>
+      <EntityStatStrip
+        gridClassName="xl:grid-cols-6"
+        items={[
+          { label: 'KOs', value: overview.summary.ko_count, hint: 'distinct KOs' },
+          { label: 'Genes', value: overview.summary.gene_count, hint: 'associated genes' },
+          { label: 'Compounds', value: overview.summary.compound_count, hint: 'linked compounds' },
+          { label: 'Reactions', value: overview.summary.reaction_ec_count, hint: 'EC annotations' },
+          {
+            label: 'Sources',
+            value: overview.summary.source_count,
+            hint: overview.selected_source === 'ALL' ? 'KEGG + HADEG' : overview.selected_source,
+          },
+          {
+            label: 'Coverage',
+            value: overview.summary.ko_overlap_pct == null ? '-' : `${overview.summary.ko_overlap_pct}%`,
+            hint: 'KO overlap',
+          },
+        ]}
+      />
 
-      <div className="p-6 space-y-4">
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div className="space-y-4 px-6 py-6">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <ChartCard title="KO Distribution" subtitle="Top KOs by linked compounds">
             <HorizontalBarChart
               items={toPathwayKoBarItems(overview.ko_distribution)}
@@ -182,6 +145,6 @@ export function PathwayDetail({ pathway, source, onBack }: PathwayDetailProps) {
 
         <PathwayToxicityHeatmap matrix={overview.toxicity_matrix} />
       </div>
-    </div>
+    </Card>
   );
 }
