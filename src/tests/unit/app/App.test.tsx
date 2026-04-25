@@ -26,6 +26,10 @@ vi.mock('@/components/GeneDetail', () => ({
   GeneDetail: ({ ko }: { ko: string }) => <h2>Gene Detail {ko}</h2>,
 }));
 
+vi.mock('@/components/GuidedAnalysisPage', () => ({
+  GuidedAnalysisPage: () => <h2>Guided Analysis</h2>,
+}));
+
 vi.mock('@/features/compounds/api', () => ({
   exportCompoundsToCSV: vi.fn(),
   exportCompoundsToJSON: vi.fn(),
@@ -117,5 +121,12 @@ describe('App shell navigation', () => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: 'Gene Detail K00001' })).toBeInTheDocument();
+  });
+
+  it('renders the guided analysis route from the current location', () => {
+    window.history.replaceState({}, '', '/guided-analysis');
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: 'Guided Analysis' })).toBeInTheDocument();
   });
 });
