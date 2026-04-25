@@ -18,7 +18,11 @@ interface InlineStatusBannerProps {
 
 export function InlineStatusBanner({ tone = 'info', children, className }: InlineStatusBannerProps) {
   return (
-    <div className={cn('rounded-2xl border px-4 py-3 text-sm leading-6', toneClassMap[tone], className)}>
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      aria-live={tone === 'error' ? 'assertive' : 'polite'}
+      className={cn('rounded-2xl border px-4 py-3 text-sm leading-6', toneClassMap[tone], className)}
+    >
       {children}
     </div>
   );

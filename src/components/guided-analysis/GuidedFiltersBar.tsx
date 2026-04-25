@@ -36,10 +36,13 @@ function updateRangeValue(
 }
 
 function renderSearchFilter(filter: GuidedFilterDefinition, value: GuidedFilterValue | undefined, onChange: GuidedFiltersBarProps['onChange']) {
+  const inputId = `guided-filter-${filter.id}`;
+
   return (
     <div key={filter.id} className="w-full xl:col-span-2">
-      <label className="block text-xs font-medium text-gray-600 mb-1">{filter.label}</label>
+      <label htmlFor={inputId} className="block text-xs font-medium text-gray-600 mb-1">{filter.label}</label>
       <input
+        id={inputId}
         type="text"
         value={typeof value === 'string' ? value : ''}
         onChange={(event) => onChange(filter.id, event.target.value)}
@@ -58,10 +61,12 @@ function renderSelectFilter(
 ) {
   const options = optionsByFilter[filter.id] || [];
   const current = typeof value === 'string' ? value : '';
+  const selectId = `guided-filter-${filter.id}`;
   return (
     <div key={filter.id} className="w-full">
-      <label className="block text-xs font-medium text-gray-600 mb-1">{filter.label}</label>
+      <label htmlFor={selectId} className="block text-xs font-medium text-gray-600 mb-1">{filter.label}</label>
       <select
+        id={selectId}
         value={current}
         onChange={(event) => onChange(filter.id, event.target.value)}
         className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
@@ -83,12 +88,15 @@ function renderRangeFilter(
   onChange: GuidedFiltersBarProps['onChange']
 ) {
   const current = toRangeValue(value);
+  const minId = `guided-filter-${filter.id}-min`;
+  const maxId = `guided-filter-${filter.id}-max`;
 
   return (
     <div key={filter.id} className="w-full">
-      <label className="block text-xs font-medium text-gray-600 mb-1">{filter.label}</label>
+      <label htmlFor={minId} className="block text-xs font-medium text-gray-600 mb-1">{filter.label}</label>
       <div className="grid grid-cols-2 gap-2">
         <input
+          id={minId}
           type="number"
           min={filter.min}
           max={filter.max}
@@ -99,6 +107,7 @@ function renderRangeFilter(
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
         />
         <input
+          id={maxId}
           type="number"
           min={filter.min}
           max={filter.max}

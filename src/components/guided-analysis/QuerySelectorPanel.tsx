@@ -9,7 +9,7 @@ interface QuerySelectorPanelProps {
 
 export function QuerySelectorPanel({ categories, queries, selectedId, onSelect }: QuerySelectorPanelProps) {
   return (
-    <aside className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+    <aside aria-label="Guided queries" className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <h3 className="text-sm font-semibold text-gray-900 mb-3">Guided Queries</h3>
       <div className="space-y-4">
         {categories.map((category) => {
@@ -28,6 +28,7 @@ export function QuerySelectorPanel({ categories, queries, selectedId, onSelect }
                     <button
                       key={query.id}
                       onClick={() => onSelect(query.id)}
+                      aria-pressed={isActive}
                       className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
                         isActive
                           ? 'bg-blue-50 border-blue-200 text-blue-700'

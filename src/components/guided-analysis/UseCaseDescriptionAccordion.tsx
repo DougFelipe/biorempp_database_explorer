@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { GuidedUseCaseDescription } from '../../types/guided';
 import type { ReactNode } from 'react';
 
@@ -9,6 +9,7 @@ interface UseCaseDescriptionAccordionProps {
 
 export function UseCaseDescriptionAccordion({ content, headerAction }: UseCaseDescriptionAccordionProps) {
   const [open, setOpen] = useState(false);
+  const contentId = useId();
   const hasVisualElements = Array.isArray(content.visual_elements) && content.visual_elements.length > 0;
 
   return (
@@ -19,6 +20,8 @@ export function UseCaseDescriptionAccordion({ content, headerAction }: UseCaseDe
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+            aria-controls={contentId}
             className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             {open ? 'Hide' : 'Show'}
@@ -28,7 +31,7 @@ export function UseCaseDescriptionAccordion({ content, headerAction }: UseCaseDe
       </div>
 
       {open ? (
-        <div className="px-6 pb-5 border-t border-gray-200 space-y-5">
+        <div id={contentId} role="region" className="px-6 pb-5 border-t border-gray-200 space-y-5">
           <div className="pt-4">
             <h5 className="text-sm font-semibold text-gray-900">Scientific Question</h5>
             <p className="text-sm text-gray-700 mt-1">{content.scientific_question}</p>

@@ -20,7 +20,11 @@ export function ErrorState({
 }: ErrorStateProps) {
   return (
     <Card className={cn('border-rose-200 shadow-soft', className)}>
-      <CardContent className="flex min-h-40 flex-col items-center justify-center gap-4 px-6 py-10 text-center">
+      <CardContent
+        role="alert"
+        aria-live="assertive"
+        className="flex min-h-40 flex-col items-center justify-center gap-4 px-6 py-10 text-center"
+      >
         <div className="space-y-1">
           <p className="text-base font-semibold text-rose-700">{title}</p>
           <p className="text-sm text-slate-600">{message}</p>
