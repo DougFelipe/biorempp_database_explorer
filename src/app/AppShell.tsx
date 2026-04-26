@@ -16,7 +16,7 @@ export function AppShell({ activeView, onNavigateToView, children }: AppShellPro
   return (
     <div className="app-shell">
       <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-[94vw] flex-col gap-6 py-5">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
               <button type="button" onClick={() => onNavigateToView('home')} className="flex items-center gap-3 text-left">
@@ -51,10 +51,10 @@ export function AppShell({ activeView, onNavigateToView, children }: AppShellPro
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-8 sm:px-6 lg:px-8">{children}</main>
+      <main className="mx-auto flex w-[94vw] flex-1 flex-col py-8">{children}</main>
 
       <footer className="mt-16 border-t border-slate-200/80 bg-white/85">
-        <div className="mx-auto max-w-7xl px-4 py-6 text-center text-sm text-slate-500 sm:px-6 lg:px-8">
+        <div className="mx-auto w-[94vw] py-6 text-center text-sm text-slate-500">
           {APP_FOOTER_TEXT}
         </div>
       </footer>
