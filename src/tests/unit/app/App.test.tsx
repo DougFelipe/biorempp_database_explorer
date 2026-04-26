@@ -30,6 +30,10 @@ vi.mock('@/components/GuidedAnalysisPage', () => ({
   GuidedAnalysisPage: () => <h2>Guided Analysis</h2>,
 }));
 
+vi.mock('@/components/UserGuidePage', () => ({
+  UserGuidePage: () => <h2>User Guide</h2>,
+}));
+
 vi.mock('@/features/compounds/api', () => ({
   exportCompoundsToCSV: vi.fn(),
   exportCompoundsToJSON: vi.fn(),
@@ -79,11 +83,15 @@ describe('App shell navigation', () => {
     ]);
   });
 
-  it('renders the home route and navigates to FAQ and Database Metrics', async () => {
+  it('renders the home route and navigates to User Guide, FAQ and Database Metrics', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'BioRemPP Database Explorer' }).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'User Guide' }));
+    expect(screen.getByRole('heading', { name: 'User Guide' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/user-guide');
 
     await user.click(screen.getByRole('button', { name: 'FAQ' }));
     expect(screen.getByRole('heading', { name: FAQ_CATALOG.title })).toBeInTheDocument();
@@ -128,5 +136,12 @@ describe('App shell navigation', () => {
     render(<App />);
 
     expect(screen.getByRole('heading', { name: 'Guided Analysis' })).toBeInTheDocument();
+  });
+
+  it('renders the user guide route from the current location', () => {
+    window.history.replaceState({}, '', '/user-guide');
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: 'User Guide' })).toBeInTheDocument();
   });
 });
