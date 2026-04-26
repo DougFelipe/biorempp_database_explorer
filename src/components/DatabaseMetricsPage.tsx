@@ -42,9 +42,6 @@ function NumberedList({ title, items }: { title: string; items: Array<{ name: st
 }
 
 export function DatabaseMetricsPage({ onBack }: DatabaseMetricsPageProps) {
-  const rowShapes = DATABASE_METRICS_CATALOG.row_shapes;
-  const reactionCoverage = DATABASE_METRICS_CATALOG.reaction_coverage;
-
   return (
     <div className="space-y-6">
       <Card>
@@ -121,33 +118,6 @@ export function DatabaseMetricsPage({ onBack }: DatabaseMetricsPageProps) {
             </Table>
           </CardContent>
         </Card>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Card className="rounded-2xl shadow-soft">
-            <CardContent className="space-y-1 px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Row Shapes</p>
-              <p className="text-sm text-slate-700">Dense: {rowShapes.dense.toLocaleString('en-US')}</p>
-              <p className="text-sm text-slate-700">EC-only: {rowShapes.ec_only.toLocaleString('en-US')}</p>
-              <p className="text-sm text-slate-700">Reaction-only: {rowShapes.reaction_only.toLocaleString('en-US')}</p>
-              <p className="text-sm text-slate-700">Both NA: {rowShapes.both_na.toLocaleString('en-US')}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl shadow-soft">
-            <CardContent className="space-y-1 px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Reaction Description Coverage</p>
-              <p className="text-sm text-slate-700">
-                with reaction: {reactionCoverage.with_reaction_rows.toLocaleString('en-US')}
-              </p>
-              <p className="text-sm text-slate-700">
-                with description: {reactionCoverage.with_reaction_description_rows.toLocaleString('en-US')}
-              </p>
-              <p className="text-sm text-slate-700">
-                unmatched reaction IDs: {reactionCoverage.unmatched_reaction_id_count.toLocaleString('en-US')}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
       </section>
 
       <section className="space-y-4">
