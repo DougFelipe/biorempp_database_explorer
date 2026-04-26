@@ -1,0 +1,201 @@
+version: v1
+
+hero:
+  title: BioRemPP Database Explorer
+  subtitle: >
+    Open-access web service for integrated exploration of bioremediation potential
+    across genomic, metabolic, and toxicological data.
+  description:
+    - >
+      BioRemPP enables compound-centric analysis by linking KEGG Orthologs,
+      metabolic pathways, and toxicity endpoints to environmentally relevant
+      pollutants curated from regulatory frameworks.
+    - >
+      The platform supports exploratory analysis, hypothesis generation, and
+      data-driven prioritization for environmental bioinformatics and
+      bioremediation research.
+  access_statement: >
+    This web service is free and open to all users and does not require login
+    or registration. It is not usable for commercial product claims without experimental confirmation
+  highlights:
+    - label: Access
+      value: Free and open
+      hint: No login or registration required
+    - label: Analytical framing
+      value: Compound-centric
+      hint: Cross-domain exploration across genes, pathways, compounds, and toxicity
+    - label: Reproducibility
+      value: Versioned
+      hint: Zenodo releases with transparent SQL and Python-backed workflows
+
+scientific_overview:
+  eyebrow: Overview
+  title: Scientific Overview
+  content:
+    - >
+      BioRemPP integrates heterogeneous biological and chemical datasets into a
+      unified analytical framework for investigating bioremediation potential.
+    - >
+      The system connects genes, enzymes, pathways, and compounds through
+      curated mappings, enabling cross-domain exploration of degradation
+      capabilities and toxicological risks.
+    - >
+      Designed as a compound-centric platform, BioRemPP facilitates the
+      identification of biologically relevant mechanisms associated with
+      environmental contaminants.
+
+data_sources:
+  eyebrow: Provenance
+  title: Data Sources
+  items:
+    - "KEGG: metabolic pathways and ortholog annotations"
+    - "HADEG: hydrocarbon degradation genes and pathway associations"
+    - "ToxCSM: computational toxicity prediction endpoints"
+    - "Regulatory priority compound lists, including ATSDR, EPA, and related frameworks"
+  footer: >
+    All sources are harmonized into a unified schema to support
+    cross-database analytical workflows.
+
+target_users:
+  eyebrow: Audience
+  title: Target Users
+  items:
+    - Bioinformaticians and computational biologists
+    - Environmental scientists and microbiologists
+    - Researchers in bioremediation and toxicology
+    - Multi-omics and data-driven research groups
+
+browse_section:
+  eyebrow: Explore
+  title: Browse by Category
+  description: >
+    Explore database entities and relationships across molecular, biochemical,
+    and toxicological dimensions.
+  items:
+    - id: compounds
+      label: Compounds
+      description: >
+        Inspect integrated compound summaries, toxicity context, and linked
+        pathway and gene associations.
+    - id: compound-classes
+      label: Compound Classes
+      description: >
+        Review class-level aggregation patterns across bioremediation coverage
+        and toxicological context.
+    - id: genes
+      label: Genes / KO
+      description: >
+        Explore KO-centric and gene-level mappings connected to compounds,
+        enzymes, and pathway evidence.
+    - id: pathways
+      label: Pathways
+      description: >
+        Examine KEGG and HADEG pathway relationships relevant to degradation
+        potential and compound context.
+    - id: toxicity
+      label: Toxicity
+      description: >
+        Navigate endpoint-level toxicity predictions and comparative risk
+        patterns derived from ToxCSM.
+    - id: guided-analysis
+      label: Guided Analysis
+      description: >
+        Run structured and reproducible analytical workflows derived from
+        predefined scientific questions.
+
+guided_analysis:
+  eyebrow: Analysis
+  title: Guided Analysis
+  description:
+    - >
+      Guided Analysis provides structured and reproducible analytical workflows
+      based on predefined scientific questions.
+    - >
+      Each use case is defined through declarative configurations with explicit
+      filtering criteria, standardized transformations, reproducible query
+      execution, and clearly delimited interpretation scope.
+  cta_label: Launch Analysis
+  panels:
+    - title: Structured workflows
+      bullets:
+        - Scientific questions are encoded as declarative YAML use cases.
+        - Filtering criteria and transformation steps are explicit and inspectable.
+        - Outputs remain aligned with the configured analytical contract.
+    - title: Reproducible execution
+      bullets:
+        - Use cases are executed through standardized SQL and Python-backed logic.
+        - Versioned inputs and stable query definitions support traceable reruns.
+        - Execution metadata are exposed together with result summaries.
+    - title: Visual outputs and metrics
+      bullets:
+        - Compound ranking and prioritization views support comparative inspection.
+        - Toxicity heatmaps, distributions, and risk versus potential mapping remain linked to tabular outputs.
+        - Summary cards and paginated tables keep analytical context visible.
+    - title: Interpretation scope
+      bullets:
+        - Results are intended for exploratory analysis and hypothesis generation.
+        - Workflow outputs should be interpreted within their declared filtering context.
+        - Downstream validation remains necessary for confirmatory claims.
+  scope_note: >
+    Guided workflows are intended for exploratory analysis and hypothesis
+    generation; they do not constitute confirmatory or causal evidence without
+    external validation.
+
+downloads:
+  eyebrow: Access
+  title: Database Downloads
+  description:
+    - >
+      All datasets are versioned and publicly distributed through Zenodo to
+      support reproducibility, transparency, and citation readiness.
+    - >
+      The primary runtime database is distributed alongside supporting source
+      tables and auxiliary datasets required for traceable analytical reuse.
+  primary_title: Primary runtime package
+  primary_description: >
+    The SQLite runtime database is kept immediately visible as the main
+    distribution artifact for reproducible local execution and inspection.
+  accordion_title: Other database packages
+  accordion_description: >
+    Expand to review the supporting source tables and external dataset packages
+    associated with the current release.
+  disclaimer_title: Download notice
+  disclaimer_paragraphs:
+    - >
+      BioRemPP distributions are versioned to support reproducibility,
+      traceability, and transparent reuse of released data assets.
+    - >
+      Public releases include the runtime SQLite database together with source
+      tables and supporting datasets required for structured downstream analysis.
+    - >
+      Users should cite the corresponding Zenodo deposition associated with the
+      downloaded release.
+  selected_release_prefix: Selected release
+  open_release_label: Open release
+  close_label: Close
+
+snapshot:
+  eyebrow: Snapshot
+  title: Database Snapshot
+  description: >
+    Quick overview of the current BioRemPP release, including coverage metrics,
+    entity counts, and data distribution aligned with the full metrics
+    documentation.
+  action_label: View full database metrics
+
+limitations:
+  eyebrow: Interpretation
+  title: Scope and Limitations
+  content:
+    - >
+      BioRemPP provides exploratory analytical outputs intended for hypothesis
+      generation and prioritization.
+    - >
+      Results should not be interpreted as confirmatory, clinical, or causal
+      evidence without external experimental validation.
+
+footer:
+  content: >
+    BioRemPP Database Explorer - Integrating genomic, metabolic, and
+    toxicological data for bioremediation research. Open access | Versioned
+    datasets | Reproducible workflows
