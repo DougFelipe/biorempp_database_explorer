@@ -2,6 +2,7 @@ import { getClientBasePath, stripBasePath, withBasePath } from '../utils/basePat
 
 export type View =
   | 'home'
+  | 'user-guide'
   | 'faq'
   | 'contact'
   | 'database-metrics'
@@ -21,6 +22,7 @@ export type Route =
 
 export const VIEW_PATHS: Record<View, string> = {
   home: '/',
+  'user-guide': '/user-guide',
   faq: '/faq',
   contact: '/contact',
   'database-metrics': '/database-metrics',
@@ -47,6 +49,9 @@ export function parseRoute(pathname: string): Route {
   }
   if (path === '/compounds') {
     return { kind: 'view', view: 'compounds' };
+  }
+  if (path === '/user-guide') {
+    return { kind: 'view', view: 'user-guide' };
   }
   if (path === '/faq') {
     return { kind: 'view', view: 'faq' };

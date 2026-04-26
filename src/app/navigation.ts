@@ -1,4 +1,5 @@
 import type { View } from './routes';
+import { HOME_EDITORIAL_CATALOG } from '../config/homeCatalog';
 
 export interface AppNavigationItem {
   id: string;
@@ -13,11 +14,10 @@ export const APP_BRAND = {
 
 export const APP_PRIMARY_NAV: AppNavigationItem[] = [
   { id: 'database-metrics', label: 'Database Metrics', view: 'database-metrics' },
-  { id: 'guided-analysis', label: 'User Guide', view: 'guided-analysis' },
+  { id: 'user-guide', label: 'User Guide', view: 'user-guide' },
   { id: 'faq', label: 'FAQ', view: 'faq' },
   { id: 'contact', label: 'Contact', view: 'contact' },
   { id: 'documentation', label: 'Documentation', view: 'database-metrics' },
 ];
 
-export const APP_FOOTER_TEXT =
-  'BioRemPP Database Explorer - Integrating BioRemPP, HADEG, KEGG, and ToxCSM data';
+export const APP_FOOTER_TEXT = HOME_EDITORIAL_CATALOG.footer.content;

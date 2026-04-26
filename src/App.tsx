@@ -27,6 +27,7 @@ import { HomePage } from './components/HomePage';
 import { PathwayExplorer } from './components/PathwayExplorer';
 import { PathwayDetail } from './components/PathwayDetail';
 import { ToxicityExplorer } from './components/ToxicityExplorer';
+import { UserGuidePage } from './components/UserGuidePage';
 
 function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
@@ -89,6 +90,9 @@ function App() {
   function renderRouteContent() {
     if (route.kind === 'view' && route.view === 'home') {
       return <HomePage onNavigateToView={navigateToView} />;
+    }
+    if (route.kind === 'view' && route.view === 'user-guide') {
+      return <UserGuidePage onNavigateToView={navigateToView} />;
     }
     if (route.kind === 'view' && route.view === 'faq') {
       return <FaqPage onNavigateToView={navigateToView} />;
