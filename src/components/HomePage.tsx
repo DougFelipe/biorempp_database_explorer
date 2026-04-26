@@ -2,7 +2,12 @@ import { useMemo, useState } from 'react';
 import { ArrowUpRight, Database, Download, FileSpreadsheet } from 'lucide-react';
 import type { View } from '../app/routes';
 import { DOWNLOAD_CATALOG } from '../config/downloadCatalog';
+import { HOME_EDITORIAL_CATALOG } from '../config/homeCatalog';
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
   Badge,
   Button,
   Card,
@@ -22,112 +27,200 @@ interface HomePageProps {
   onNavigateToView: (view: View) => void;
 }
 
-const BROWSE_BY_CATEGORY_ITEMS: Array<{
-  id: Extract<View, 'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'guided-analysis'>;
-  label: string;
-  description: string;
-}> = [
-  { id: 'compounds', label: 'Compounds', description: 'Explore compound-level integrated summaries and details.' },
-  { id: 'compound-classes', label: 'Compound Classes', description: 'Browse aggregate analytics by BioRemPP classes.' },
-  { id: 'genes', label: 'Genes / KO', description: 'Inspect KO and gene-level records and relationships.' },
-  { id: 'pathways', label: 'Pathways', description: 'Review KEGG and HADEG pathway-level relationships.' },
-  { id: 'toxicity', label: 'Toxicity', description: 'Navigate endpoint-level ToxCSM predictions.' },
-  { id: 'guided-analysis', label: 'Guided Analysis', description: 'Run curated analytical use cases with reproducible outputs.' },
-];
-
-const GUIDED_ANALYSIS_PANELS = [
-  {
-    title: 'What is implemented',
-    bullets: [
-      'Compound, Pathway and Gene/KO analytical blocks with curated use cases.',
-      'Ranking and association analyses for bioremediation potential and toxicological context.',
-      'Cross-database exploratory views (BioRemPP, KEGG, HADEG, ToxCSM).',
-    ],
-  },
-  {
-    title: 'Visual outputs and metrics',
-    bullets: [
-      'Horizontal bar rankings, toxicity heatmaps, risk-vs-potential scatter, and distribution plots.',
-      'Summary cards with scope, ranked entities, excluded records and execution context.',
-      'Tabular outputs aligned with plotted data and paginated for inspection.',
-    ],
-  },
-  {
-    title: 'Filtering and analytical controls',
-    bullets: [
-      'Endpoint and endpoint-group filters for toxicity-focused analyses.',
-      'Ranges for KO count, gene count, pathway annotations and prediction thresholds.',
-      'Search filters for compounds and contextual selectors by class/source.',
-    ],
-  },
-  {
-    title: 'Reproducibility templates',
-    bullets: [
-      'Per-use-case methods modal describing transformation and analytical steps.',
-      'Per-use-case SQLite and Python query recipes for output replication.',
-      'Declarative YAML configuration for use-case text, filters and execution contract.',
-    ],
-  },
-];
-
 function iconForFormat(format: string) {
   return format.toUpperCase() === 'SQLITE' ? Database : FileSpreadsheet;
 }
 
+function renderParagraphs(items: string[], className: string) {
+  return items.map((paragraph) => (
+    <p key={paragraph} className={className}>
+      {paragraph}
+    </p>
+  ));
+}
+
+function DownloadCatalogCard({
+  item,
+  onReview,
+}: {
+  item: (typeof DOWNLOAD_CATALOG.items)[number];
+  onReview: (id: string) => void;
+}) {
+  const Icon = iconForFormat(item.format);
+
+  return (
+    <Card className="rounded-2xl border-slate-200 bg-slate-50/70 shadow-soft">
+      <CardContent className="space-y-4 px-4 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-slate-950">{item.label}</p>
+            <p className="text-xs text-slate-500">{item.source}</p>
+          </div>
+          <Badge variant="outline">{item.format}</Badge>
+        </div>
+
+        <div className="space-y-1 text-xs text-slate-600">
+          <p>Version: {item.version}</p>
+          {item.size ? <p>Size: {item.size}</p> : null}
+          {item.updated_at ? <p>Updated: {item.updated_at}</p> : null}
+        </div>
+
+        <Button className="w-full justify-between" onClick={() => onReview(item.id)}>
+          <span className="inline-flex items-center gap-2">
+            <Icon className="h-4 w-4" />
+            {HOME_EDITORIAL_CATALOG.downloads.disclaimer_title}
+          </span>
+          <ArrowUpRight className="h-4 w-4" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BrowseByCategorySection({
+  onNavigateToView,
+}: {
+  onNavigateToView: (view: View) => void;
+}) {
+  const browseSection = HOME_EDITORIAL_CATALOG.browse_section;
+
+  return (
+    <Card>
+      <CardContent className="space-y-6 px-6 py-6">
+        <SectionHeader
+          eyebrow={browseSection.eyebrow}
+          title={browseSection.title}
+          description={browseSection.description}
+        />
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {browseSection.items.map((item) => (
+            <Button
+              key={item.id}
+              variant="outline"
+              size="lg"
+              onClick={() => onNavigateToView(item.id)}
+              className="h-auto justify-start rounded-2xl border-slate-200 px-4 py-4 text-left"
+            >
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-950">{item.label}</p>
+                <p className="text-xs leading-5 text-slate-600">{item.description}</p>
+              </div>
+            </Button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function HomePage({ onNavigateToView }: HomePageProps) {
   const [selectedDownloadId, setSelectedDownloadId] = useState<string | null>(null);
+  const homeContent = HOME_EDITORIAL_CATALOG;
 
   const selectedDownload = useMemo(
     () => DOWNLOAD_CATALOG.items.find((item) => item.id === selectedDownloadId) || null,
     [selectedDownloadId]
   );
+  const primaryDownload = DOWNLOAD_CATALOG.items[0] || null;
+  const secondaryDownloads = DOWNLOAD_CATALOG.items.slice(1);
 
   return (
     <div className="space-y-6">
       <Card>
         <CardContent className="space-y-6 px-6 py-6">
           <SectionHeader
-            eyebrow="Overview"
-            title="Home"
-            description="Access dataset downloads hosted externally on Zenodo, inspect the current database metrics, and jump into the main scientific exploration modules."
-            action={<Badge variant="subtle">Functional beta</Badge>}
+            eyebrow={homeContent.scientific_overview.eyebrow}
+            title={homeContent.hero.title}
+            description={homeContent.hero.subtitle}
+            action={<Badge variant="subtle">Open Access</Badge>}
           />
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(19rem,0.8fr)]">
             <div className="surface-muted px-5 py-5">
-              <p className="text-sm font-semibold text-slate-900">Current focus</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Preserve scientific coverage while hardening navigation, metric readability, and reproducibility
-                touchpoints. This first shell keeps the app lightweight and direct, but removes the roughest UI edges.
-              </p>
+              <div className="space-y-3">
+                {renderParagraphs(homeContent.hero.description, 'text-sm leading-6 text-slate-600')}
+              </div>
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900">
+                {homeContent.hero.access_statement}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-              <MetricCard label="Downloads catalog" value={DOWNLOAD_CATALOG.items.length} hint="Zenodo-hosted packages" />
-              <MetricCard label="Primary entry points" value={BROWSE_BY_CATEGORY_ITEMS.length} hint="Exploration modules" />
-              <MetricCard label="Documentation mode" value="Structured" hint="Metrics, FAQ and guided analysis kept aligned" />
+              {homeContent.hero.highlights.map((highlight) => (
+                <MetricCard
+                  key={highlight.label}
+                  label={highlight.label}
+                  value={highlight.value}
+                  hint={highlight.hint}
+                />
+              ))}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <DatabaseSnapshotSection onOpenDatabaseMetrics={() => onNavigateToView('database-metrics')} />
+      <Card>
+        <CardContent className="space-y-6 px-6 py-6">
+          <SectionHeader
+            eyebrow={homeContent.scientific_overview.eyebrow}
+            title={homeContent.scientific_overview.title}
+          />
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="surface-muted px-5 py-5">
+              <div className="space-y-3">
+                {renderParagraphs(homeContent.scientific_overview.content, 'text-sm leading-6 text-slate-600')}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-soft">
+                <p className="text-sm font-semibold text-slate-950">{homeContent.data_sources.title}</p>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
+                  {homeContent.data_sources.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+                {homeContent.data_sources.footer ? (
+                  <p className="mt-4 text-xs leading-5 text-slate-500">{homeContent.data_sources.footer}</p>
+                ) : null}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-soft">
+                <p className="text-sm font-semibold text-slate-950">{homeContent.target_users.title}</p>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
+                  {homeContent.target_users.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <BrowseByCategorySection onNavigateToView={onNavigateToView} />
 
       <Card>
         <CardContent className="space-y-6 px-6 py-6">
           <SectionHeader
-            eyebrow="Analysis"
-            title="Guided Analysis"
-            description="Guided Analysis centralizes exploratory workflows executed server-side on SQLite from declarative YAML templates. Each use case is structured with scientific question, reproducible filtering, standardized outputs, and explicit interpretation scope for hypothesis generation."
+            eyebrow={homeContent.guided_analysis.eyebrow}
+            title={homeContent.guided_analysis.title}
+            description={homeContent.guided_analysis.description[0]}
             action={
               <Button variant="subtle" onClick={() => onNavigateToView('guided-analysis')}>
-                Open Guided Analysis
+                {homeContent.guided_analysis.cta_label}
               </Button>
             }
           />
 
+          <div className="space-y-3">
+            {renderParagraphs(homeContent.guided_analysis.description.slice(1), 'text-sm leading-6 text-slate-600')}
+          </div>
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {GUIDED_ANALYSIS_PANELS.map((panel) => (
+            {homeContent.guided_analysis.panels.map((panel) => (
               <div key={panel.title} className="surface-muted px-4 py-4 text-sm text-slate-600">
                 <p className="font-semibold text-slate-900">{panel.title}</p>
                 <ul className="mt-3 list-disc space-y-2 pl-5">
@@ -140,8 +233,7 @@ export function HomePage({ onNavigateToView }: HomePageProps) {
           </div>
 
           <div className="surface-muted px-4 py-3 text-xs leading-5 text-slate-500">
-            Scope: exploratory analysis and hypothesis generation; results should not be interpreted as causal or
-            confirmatory evidence without external validation.
+            {homeContent.guided_analysis.scope_note}
           </div>
         </CardContent>
       </Card>
@@ -149,89 +241,91 @@ export function HomePage({ onNavigateToView }: HomePageProps) {
       <Card>
         <CardContent className="space-y-6 px-6 py-6">
           <SectionHeader
-            eyebrow="Access"
+            eyebrow={homeContent.downloads.eyebrow}
             title={
               <span className="inline-flex items-center gap-2">
                 <Download className="h-5 w-5 text-accent" />
-                {DOWNLOAD_CATALOG.title}
+                {homeContent.downloads.title}
               </span>
             }
-            description={
-              DOWNLOAD_CATALOG.note ||
-              'Dataset packages are distributed externally and linked here for controlled release access.'
-            }
+            description={homeContent.downloads.description[0]}
           />
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {DOWNLOAD_CATALOG.items.map((item) => {
-              const Icon = iconForFormat(item.format);
-              return (
-                <Card key={item.id} className="rounded-2xl border-slate-200 bg-slate-50/70 shadow-soft">
-                  <CardContent className="space-y-4 px-4 py-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-slate-950">{item.label}</p>
-                        <p className="text-xs text-slate-500">{item.source}</p>
-                      </div>
-                      <Badge variant="outline">{item.format}</Badge>
-                    </div>
-
-                    <div className="space-y-1 text-xs text-slate-600">
-                      <p>Version: {item.version}</p>
-                      {item.size ? <p>Size: {item.size}</p> : null}
-                      {item.updated_at ? <p>Updated: {item.updated_at}</p> : null}
-                    </div>
-
-                    <Button className="w-full justify-between" onClick={() => setSelectedDownloadId(item.id)}>
-                      <span className="inline-flex items-center gap-2">
-                        <Icon className="h-4 w-4" />
-                        Review download
-                      </span>
-                      <ArrowUpRight className="h-4 w-4" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
+          <div className="space-y-3">
+            {renderParagraphs(homeContent.downloads.description.slice(1), 'text-sm leading-6 text-slate-600')}
           </div>
+
+          {primaryDownload ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-slate-900">{homeContent.downloads.primary_title}</p>
+                <p className="text-sm leading-6 text-slate-600">{homeContent.downloads.primary_description}</p>
+              </div>
+
+              <DownloadCatalogCard item={primaryDownload} onReview={setSelectedDownloadId} />
+
+              {secondaryDownloads.length > 0 ? (
+                <Accordion type="single" collapsible className="rounded-2xl border border-slate-200 bg-white px-5">
+                  <AccordionItem value="other-database-downloads" className="border-b-0">
+                    <AccordionTrigger className="py-5 text-base">
+                      <span className="space-y-1">
+                        <span className="block text-sm font-semibold text-slate-950">
+                          {homeContent.downloads.accordion_title} ({secondaryDownloads.length})
+                        </span>
+                        <span className="block text-xs font-normal leading-5 text-slate-500">
+                          {homeContent.downloads.accordion_description}
+                        </span>
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-5">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-2">
+                        {secondaryDownloads.map((item) => (
+                          <DownloadCatalogCard key={item.id} item={item} onReview={setSelectedDownloadId} />
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              ) : null}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
+
+      <DatabaseSnapshotSection
+        eyebrow={homeContent.snapshot.eyebrow}
+        title={homeContent.snapshot.title}
+        description={homeContent.snapshot.description}
+        actionLabel={homeContent.snapshot.action_label}
+        onOpenDatabaseMetrics={() => onNavigateToView('database-metrics')}
+      />
 
       <Card>
         <CardContent className="space-y-6 px-6 py-6">
           <SectionHeader
-            eyebrow="Explore"
-            title="Browse by Category"
-            description="Open explorers and analysis views from a single navigation panel."
+            eyebrow={homeContent.limitations.eyebrow}
+            title={homeContent.limitations.title}
           />
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {BROWSE_BY_CATEGORY_ITEMS.map((item) => (
-              <Button
-                key={item.id}
-                variant="outline"
-                size="lg"
-                onClick={() => onNavigateToView(item.id)}
-                className="h-auto justify-start rounded-2xl border-slate-200 px-4 py-4 text-left"
-              >
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-slate-950">{item.label}</p>
-                  <p className="text-xs leading-5 text-slate-600">{item.description}</p>
-                </div>
-              </Button>
-            ))}
+          <div className="surface-muted px-5 py-5">
+            <div className="space-y-3">
+              {renderParagraphs(homeContent.limitations.content, 'text-sm leading-6 text-slate-600')}
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(selectedDownload)} onOpenChange={(open) => setSelectedDownloadId(open ? selectedDownloadId : null)}>
+      <Dialog
+        open={Boolean(selectedDownload)}
+        onOpenChange={(open) => setSelectedDownloadId(open ? selectedDownloadId : null)}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Download Disclaimer</DialogTitle>
+            <DialogTitle>{homeContent.downloads.disclaimer_title}</DialogTitle>
             <DialogDescription>
               {selectedDownload
-                ? `${selectedDownload.label} · ${selectedDownload.format} · ${selectedDownload.version}`
-                : 'Review release constraints before opening the external download page.'}
+                ? `${selectedDownload.label} / ${selectedDownload.format} / ${selectedDownload.version}`
+                : homeContent.downloads.primary_description}
             </DialogDescription>
           </DialogHeader>
 
@@ -244,21 +338,13 @@ export function HomePage({ onNavigateToView }: HomePageProps) {
               </div>
             ) : null}
 
-            <p>
-              For compliance during this development phase, only BioRemPP database version <strong>1.0.0</strong> is
-              currently available for public download.
-            </p>
-            <p>
-              The stable version <strong>1.1.0</strong> is being implemented for release together with the Snakemake
-              pipeline to ensure BioRemPP database reproducibility.
-            </p>
-            <p>
-              Release <strong>1.1.0</strong> will add EC, Reaction ID and Reaction Description information to expand
-              interoperability and support metabolomics-based inference workflows.
-            </p>
+            {homeContent.downloads.disclaimer_paragraphs.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+
             {selectedDownload ? (
               <p>
-                Selected release:
+                {homeContent.downloads.selected_release_prefix}:
                 <a
                   href={selectedDownload.url}
                   target="_blank"
@@ -273,12 +359,12 @@ export function HomePage({ onNavigateToView }: HomePageProps) {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedDownloadId(null)}>
-              Close
+              {homeContent.downloads.close_label}
             </Button>
             {selectedDownload ? (
               <Button asChild>
                 <a href={selectedDownload.url} target="_blank" rel="noopener noreferrer">
-                  Open release
+                  {homeContent.downloads.open_release_label}
                   <ArrowUpRight className="h-4 w-4" />
                 </a>
               </Button>

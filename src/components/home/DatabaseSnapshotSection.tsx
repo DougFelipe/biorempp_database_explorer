@@ -1,27 +1,38 @@
 import { Database } from 'lucide-react';
 import { DATABASE_METRICS_CATALOG } from '../../config/databaseMetricsCatalog';
 import { Button, Card, CardContent, MetricCard, SectionHeader } from '../../shared/ui';
+import type { ReactNode } from 'react';
 
 interface DatabaseSnapshotSectionProps {
+  eyebrow?: ReactNode;
+  title?: ReactNode;
+  description?: ReactNode;
+  actionLabel?: ReactNode;
   onOpenDatabaseMetrics: () => void;
 }
 
-export function DatabaseSnapshotSection({ onOpenDatabaseMetrics }: DatabaseSnapshotSectionProps) {
+export function DatabaseSnapshotSection({
+  eyebrow = 'Snapshot',
+  title = 'Database Snapshot (v1.1.0 metrics)',
+  description = 'Quick metric baseline for the current BioRemPP release, aligned with the full metrics documentation.',
+  actionLabel = 'View full database metrics',
+  onOpenDatabaseMetrics,
+}: DatabaseSnapshotSectionProps) {
   return (
     <Card>
       <CardContent className="space-y-6 px-6 py-6">
         <SectionHeader
-          eyebrow="Snapshot"
+          eyebrow={eyebrow}
           title={
             <span className="inline-flex items-center gap-2">
               <Database className="h-5 w-5 text-accent" />
-              Database Snapshot (v1.1.0 metrics)
+              {title}
             </span>
           }
-          description="Quick metric baseline for the current BioRemPP release, aligned with the full metrics documentation."
+          description={description}
           action={
             <Button variant="outline" onClick={onOpenDatabaseMetrics}>
-              View full database metrics
+              {actionLabel}
             </Button>
           }
         />
