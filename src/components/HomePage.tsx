@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { ArrowUpRight, Database, Download, FileSpreadsheet } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, Database, Download, FileSpreadsheet, Quote } from 'lucide-react';
 import type { View } from '../app/routes';
 import { DOWNLOAD_CATALOG } from '../config/downloadCatalog';
 import { HOME_EDITORIAL_CATALOG } from '../config/homeCatalog';
+import { CLIENT_BASE_PATH } from '../shared/api/client';
 import {
   Accordion,
   AccordionContent,
@@ -18,9 +19,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  MetricCard,
   SectionHeader,
 } from '../shared/ui';
+import { withBasePath } from '../utils/basePath';
 import { DatabaseSnapshotSection } from './home/DatabaseSnapshotSection';
 
 interface HomePageProps {
@@ -116,12 +117,22 @@ function BrowseByCategorySection({
 
 export function HomePage({ onNavigateToView }: HomePageProps) {
   const [selectedDownloadId, setSelectedDownloadId] = useState<string | null>(null);
+  const [heroDialogId, setHeroDialogId] = useState<'terms-of-use' | 'how-to-cite' | null>(null);
   const homeContent = HOME_EDITORIAL_CATALOG;
 
   const selectedDownload = useMemo(
     () => DOWNLOAD_CATALOG.items.find((item) => item.id === selectedDownloadId) || null,
     [selectedDownloadId]
   );
+  const selectedHeroModal = useMemo(() => {
+    if (heroDialogId === 'terms-of-use') {
+      return homeContent.hero.modals.terms_of_use;
+    }
+    if (heroDialogId === 'how-to-cite') {
+      return homeContent.hero.modals.how_to_cite;
+    }
+    return null;
+  }, [heroDialogId, homeContent.hero.modals]);
   const primaryDownload = DOWNLOAD_CATALOG.items[0] || null;
   const secondaryDownloads = DOWNLOAD_CATALOG.items.slice(1);
 
@@ -129,31 +140,60 @@ export function HomePage({ onNavigateToView }: HomePageProps) {
     <div className="space-y-6">
       <Card>
         <CardContent className="space-y-6 px-6 py-6">
-          <SectionHeader
-            eyebrow={homeContent.scientific_overview.eyebrow}
-            title={homeContent.hero.title}
-            description={homeContent.hero.subtitle}
-            action={<Badge variant="subtle">Open Access</Badge>}
-          />
+          <SectionHeader eyebrow={homeContent.scientific_overview.eyebrow} title={homeContent.hero.title} />
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(19rem,0.8fr)]">
-            <div className="surface-muted px-5 py-5">
-              <div className="space-y-3">
-                {renderParagraphs(homeContent.hero.description, 'text-sm leading-6 text-slate-600')}
-              </div>
-              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900">
-                {homeContent.hero.access_statement}
-              </div>
+          <div className="grid grid-cols-1 items-center gap-8 xl:grid-cols-[minmax(15rem,0.85fr)_minmax(0,1.15fr)]">
+            <div className="flex justify-center xl:justify-start">
+              <img
+                src={withBasePath('/BIOREMPP_LOGO.png', CLIENT_BASE_PATH)}
+                alt="BioRemPP logo"
+                className="h-auto w-full max-w-[12rem] object-contain sm:max-w-[16rem] xl:max-w-[18rem]"
+              />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-              {homeContent.hero.highlights.map((highlight) => (
-                <MetricCard
-                  key={highlight.label}
-                  label={highlight.label}
-                  value={highlight.value}
-                  hint={highlight.hint}
-                />
+            <div className="space-y-5 text-center xl:text-center">
+              <p className="text-base leading-7 text-slate-700 sm:text-lg">
+                {homeContent.hero.subtitle}
+              </p>
+
+              <div className="space-y-3">
+                {renderParagraphs(homeContent.hero.description, 'text-sm leading-7 text-slate-600 sm:text-base')}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                {homeContent.hero.cta_buttons.map((button) => {
+                  const icon = button.id === 'terms-of-use' ? AlertTriangle : Quote;
+                  const variant = button.variant === 'warning' ? 'outline' : button.variant;
+                  const Icon = icon;
+
+                  return (
+                    <Button
+                      key={button.id}
+                      variant={variant}
+                      size="lg"
+                      onClick={() => setHeroDialogId(button.id)}
+                      className={
+                        button.id === 'terms-of-use'
+                          ? 'border-amber-200 bg-amber-100 text-amber-800 hover:border-amber-300 hover:bg-amber-200'
+                          : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      {button.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-5 text-center">
+            <div className="space-y-2">
+              <p className="text-sm leading-6 text-emerald-900">{homeContent.hero.access_statement}</p>
+              {homeContent.hero.notice_lines.map((line) => (
+                <p key={line} className="text-sm leading-6 text-emerald-900">
+                  {line}
+                </p>
               ))}
             </div>
           </div>
@@ -314,6 +354,30 @@ export function HomePage({ onNavigateToView }: HomePageProps) {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={Boolean(heroDialogId)}
+        onOpenChange={(open) => setHeroDialogId(open ? heroDialogId : null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedHeroModal?.title ?? homeContent.hero.title}</DialogTitle>
+            <DialogDescription>{selectedHeroModal?.description ?? homeContent.hero.subtitle}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 text-sm leading-6 text-slate-700">
+            {selectedHeroModal?.paragraphs.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHeroDialogId(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(selectedDownload)}

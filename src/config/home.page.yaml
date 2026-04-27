@@ -17,16 +17,44 @@ hero:
   access_statement: >
     This web service is free and open to all users and does not require login
     or registration. It is not usable for commercial product claims without experimental confirmation
-  highlights:
-    - label: Access
-      value: Free and open
-      hint: No login or registration required
-    - label: Analytical framing
-      value: Compound-centric
-      hint: Cross-domain exploration across genes, pathways, compounds, and toxicity
-    - label: Reproducibility
-      value: Versioned
-      hint: Zenodo releases with transparent SQL and Python-backed workflows
+  notice_lines:
+    - This web service is free and open to all users and does not require login.
+    - It is not usable for commercial product claims without experimental confirmation.
+    - See the license page for detailed terms of use.
+  cta_buttons:
+    - id: terms-of-use
+      label: Terms of Use
+      variant: warning
+    - id: how-to-cite
+      label: How to Cite
+      variant: success
+  modals:
+    terms_of_use:
+      title: Terms of Use
+      description: >
+        Placeholder notice for access, reuse, and interpretative boundaries of the BioRemPP web service.
+      paragraphs:
+        - >
+          BioRemPP is provided as a free and open-access exploratory web service for
+          scientific inspection, hypothesis generation, and data-driven prioritization.
+        - >
+          Outputs exposed in the interface should not be reused as commercial product
+          claims or confirmatory evidence without independent experimental validation.
+        - >
+          A dedicated license and policy page will be linked here in a future update.
+    how_to_cite:
+      title: How to Cite
+      description: >
+        Placeholder citation guidance for the BioRemPP web service, release metadata, and associated datasets.
+      paragraphs:
+        - >
+          When citing BioRemPP, users should reference both the web service publication
+          and the corresponding Zenodo release associated with the dataset version in use.
+        - >
+          Citation guidance should include versioning information whenever outputs are
+          discussed, reproduced, or incorporated into downstream analyses.
+        - >
+          A formatted citation block and release-specific references will be provided in a future update.
 
 scientific_overview:
   eyebrow: Overview

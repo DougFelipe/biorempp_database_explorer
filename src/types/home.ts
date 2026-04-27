@@ -5,10 +5,23 @@ export type HomeBrowseViewId = Extract<
   'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'guided-analysis'
 >;
 
-export interface HomeMetricHighlight {
+export type HomeHeroCtaId = 'terms-of-use' | 'how-to-cite';
+
+export interface HomeHeroCtaButton {
+  id: HomeHeroCtaId;
   label: string;
-  value: string;
-  hint: string;
+  variant: 'secondary' | 'warning' | 'success';
+}
+
+export interface HomeHeroModalContent {
+  title: string;
+  description: string;
+  paragraphs: string[];
+}
+
+export interface HomeHeroModals {
+  terms_of_use: HomeHeroModalContent;
+  how_to_cite: HomeHeroModalContent;
 }
 
 export interface HomeHeroContent {
@@ -16,7 +29,9 @@ export interface HomeHeroContent {
   subtitle: string;
   description: string[];
   access_statement: string;
-  highlights: HomeMetricHighlight[];
+  notice_lines: string[];
+  cta_buttons: HomeHeroCtaButton[];
+  modals: HomeHeroModals;
 }
 
 export interface HomeSectionTextBlock {

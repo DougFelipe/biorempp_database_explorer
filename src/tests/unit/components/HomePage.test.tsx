@@ -6,6 +6,29 @@ import { DOWNLOAD_CATALOG } from '../../../config/downloadCatalog';
 import { HomePage } from '../../../components/HomePage';
 
 describe('HomePage', () => {
+  it('renders the hero logo, opens hero modals, and shows the highlighted notice area', async () => {
+    const user = userEvent.setup();
+
+    render(<HomePage onNavigateToView={vi.fn()} />);
+
+    expect(screen.getByRole('img', { name: 'BioRemPP logo' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Terms of Use' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'How to Cite' })).toBeInTheDocument();
+    expect(screen.getByText(HOME_EDITORIAL_CATALOG.hero.notice_lines[0])).toBeInTheDocument();
+    expect(screen.queryByText('Free and open')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Terms of Use' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      HOME_EDITORIAL_CATALOG.hero.modals.terms_of_use.title
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Close' })[0]);
+
+    await user.click(screen.getByRole('button', { name: 'How to Cite' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      HOME_EDITORIAL_CATALOG.hero.modals.how_to_cite.title
+    );
+  });
+
   it('opens the download disclaimer dialog with the selected release', async () => {
     const user = userEvent.setup();
     const targetDownload = DOWNLOAD_CATALOG.items[0];

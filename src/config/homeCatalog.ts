@@ -8,8 +8,11 @@ import type {
   HomeEditorialCatalog,
   HomeFooterContent,
   HomeGuidedAnalysisSection,
+  HomeHeroCtaButton,
+  HomeHeroCtaId,
   HomeHeroContent,
-  HomeMetricHighlight,
+  HomeHeroModalContent,
+  HomeHeroModals,
   HomePanelGroup,
   HomeSectionTextBlock,
   HomeSnapshotSection,
@@ -24,6 +27,9 @@ const ALLOWED_BROWSE_VIEW_IDS = new Set<HomeBrowseViewId>([
   'toxicity',
   'guided-analysis',
 ]);
+
+const ALLOWED_HERO_CTA_IDS: HomeHeroCtaId[] = ['terms-of-use', 'how-to-cite'];
+const ALLOWED_HERO_CTA_VARIANTS = new Set<HomeHeroCtaButton['variant']>(['secondary', 'warning', 'success']);
 
 function assertNonEmptyString(value: unknown, path: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -49,16 +55,52 @@ function normalizeOptionalEyebrow(value: unknown, path: string): string | undefi
   return assertNonEmptyString(value, path);
 }
 
-function normalizeMetricHighlight(rawItem: unknown, path: string): HomeMetricHighlight {
+function normalizeHeroCtaButton(rawItem: unknown, path: string): HomeHeroCtaButton {
   if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) {
     throw new Error(`Invalid home config at ${path}: expected object`);
   }
 
   const item = rawItem as Record<string, unknown>;
+  const id = assertNonEmptyString(item.id, `${path}.id`) as HomeHeroCtaId;
+  const variant = assertNonEmptyString(item.variant, `${path}.variant`) as HomeHeroCtaButton['variant'];
+
+  if (!ALLOWED_HERO_CTA_IDS.includes(id)) {
+    throw new Error(`Invalid home config at ${path}.id: expected one of ${ALLOWED_HERO_CTA_IDS.join('|')}`);
+  }
+
+  if (!ALLOWED_HERO_CTA_VARIANTS.has(variant)) {
+    throw new Error(`Invalid home config at ${path}.variant: expected one of ${[...ALLOWED_HERO_CTA_VARIANTS].join('|')}`);
+  }
+
   return {
+    id,
     label: assertNonEmptyString(item.label, `${path}.label`),
-    value: assertNonEmptyString(item.value, `${path}.value`),
-    hint: assertNonEmptyString(item.hint, `${path}.hint`),
+    variant,
+  };
+}
+
+function normalizeHeroModalContent(rawModal: unknown, path: string): HomeHeroModalContent {
+  if (!rawModal || typeof rawModal !== 'object' || Array.isArray(rawModal)) {
+    throw new Error(`Invalid home config at ${path}: expected object`);
+  }
+
+  const modal = rawModal as Record<string, unknown>;
+  return {
+    title: assertNonEmptyString(modal.title, `${path}.title`),
+    description: assertNonEmptyString(modal.description, `${path}.description`),
+    paragraphs: normalizeStringList(modal.paragraphs, `${path}.paragraphs`),
+  };
+}
+
+function normalizeHeroModals(rawModals: unknown): HomeHeroModals {
+  if (!rawModals || typeof rawModals !== 'object' || Array.isArray(rawModals)) {
+    throw new Error('Invalid home config at hero.modals: expected object');
+  }
+
+  const modals = rawModals as Record<string, unknown>;
+  return {
+    terms_of_use: normalizeHeroModalContent(modals.terms_of_use, 'hero.modals.terms_of_use'),
+    how_to_cite: normalizeHeroModalContent(modals.how_to_cite, 'hero.modals.how_to_cite'),
   };
 }
 
@@ -68,17 +110,38 @@ function normalizeHero(rawHero: unknown): HomeHeroContent {
   }
 
   const hero = rawHero as Record<string, unknown>;
-  const highlightsRaw = hero.highlights;
-  if (!Array.isArray(highlightsRaw) || highlightsRaw.length === 0) {
-    throw new Error('Invalid home config at hero.highlights: expected non-empty array');
+  const ctaButtonsRaw = hero.cta_buttons;
+  if (!Array.isArray(ctaButtonsRaw) || ctaButtonsRaw.length === 0) {
+    throw new Error('Invalid home config at hero.cta_buttons: expected non-empty array');
   }
+
+  const ctaButtons = ctaButtonsRaw.map((item, index) => normalizeHeroCtaButton(item, `hero.cta_buttons[${index}]`));
+  if (ctaButtons.length !== ALLOWED_HERO_CTA_IDS.length) {
+    throw new Error(`Invalid home config at hero.cta_buttons: expected exactly ${ALLOWED_HERO_CTA_IDS.length} items`);
+  }
+
+  const seenCtaIds = new Set<string>();
+  ctaButtons.forEach((button) => {
+    if (seenCtaIds.has(button.id)) {
+      throw new Error(`Invalid home config at hero.cta_buttons: duplicated id "${button.id}"`);
+    }
+    seenCtaIds.add(button.id);
+  });
+
+  ALLOWED_HERO_CTA_IDS.forEach((id) => {
+    if (!seenCtaIds.has(id)) {
+      throw new Error(`Invalid home config at hero.cta_buttons: missing required id "${id}"`);
+    }
+  });
 
   return {
     title: assertNonEmptyString(hero.title, 'hero.title'),
     subtitle: assertNonEmptyString(hero.subtitle, 'hero.subtitle'),
     description: normalizeStringList(hero.description, 'hero.description'),
     access_statement: assertNonEmptyString(hero.access_statement, 'hero.access_statement'),
-    highlights: highlightsRaw.map((item, index) => normalizeMetricHighlight(item, `hero.highlights[${index}]`)),
+    notice_lines: normalizeStringList(hero.notice_lines, 'hero.notice_lines'),
+    cta_buttons: ctaButtons,
+    modals: normalizeHeroModals(hero.modals),
   };
 }
 
