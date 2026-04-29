@@ -21,12 +21,12 @@ export function UserGuideQuickNav({ title, description, categories }: UserGuideQ
                 asChild
                 variant="outline"
                 size="lg"
-                className="h-auto justify-start rounded-2xl border-slate-200 px-4 py-4 text-left"
+                className="h-auto w-full justify-start whitespace-normal rounded-2xl border-slate-200 px-4 py-4 text-left"
               >
                 <a href={`#${category.id}`}>
-                  <div className="space-y-1">
+                  <div className="min-w-0 max-w-full space-y-1">
                     <p className="text-sm font-semibold text-slate-950">{category.label}</p>
-                    <p className="text-xs leading-5 text-slate-600">{category.summary}</p>
+                    <p className="text-xs leading-5 text-slate-600 whitespace-normal break-words">{category.summary}</p>
                   </div>
                 </a>
               </Button>
