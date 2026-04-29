@@ -6,16 +6,22 @@ import { DOWNLOAD_CATALOG } from '../../../config/downloadCatalog';
 import { HomePage } from '../../../components/HomePage';
 
 describe('HomePage', () => {
-  it('renders the hero logo, opens hero modals, and shows the highlighted notice area', async () => {
+  it('renders the hero logo, navigates to guided analysis, opens hero modals, and shows the highlighted notice area', async () => {
     const user = userEvent.setup();
+    const onNavigateToView = vi.fn();
 
-    render(<HomePage onNavigateToView={vi.fn()} />);
+    render(<HomePage onNavigateToView={onNavigateToView} />);
 
     expect(screen.getByRole('img', { name: 'BioRemPP logo' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Launch Analysis' })[0]).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Terms of Use' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'How to Cite' })).toBeInTheDocument();
+    expect(screen.getAllByText(HOME_EDITORIAL_CATALOG.hero.access_statement)).toHaveLength(1);
     expect(screen.getByText(HOME_EDITORIAL_CATALOG.hero.notice_lines[0])).toBeInTheDocument();
     expect(screen.queryByText('Free and open')).not.toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: 'Launch Analysis' })[0]);
+    expect(onNavigateToView).toHaveBeenCalledWith('guided-analysis');
 
     await user.click(screen.getByRole('button', { name: 'Terms of Use' }));
     expect(await screen.findByRole('dialog')).toHaveTextContent(
@@ -31,9 +37,13 @@ describe('HomePage', () => {
 
   it('opens the download disclaimer dialog with the selected release', async () => {
     const user = userEvent.setup();
-    const targetDownload = DOWNLOAD_CATALOG.items[0];
+    const targetDownload = DOWNLOAD_CATALOG.items[1];
 
     render(<HomePage onNavigateToView={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole('button', { name: new RegExp(HOME_EDITORIAL_CATALOG.downloads.accordion_title, 'i') })
+    );
 
     await user.click(
       screen.getAllByRole('button', { name: HOME_EDITORIAL_CATALOG.downloads.disclaimer_title })[0]
@@ -80,9 +90,12 @@ describe('HomePage', () => {
 
     expect(screen.getByText(HOME_EDITORIAL_CATALOG.browse_section.items[0].label)).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: HOME_EDITORIAL_CATALOG.guided_analysis.title })
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { name: HOME_EDITORIAL_CATALOG.guided_analysis.title })
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(DOWNLOAD_CATALOG.items[1].label)).not.toBeInTheDocument();
+    expect(screen.queryByText('Analytical framing')).not.toBeInTheDocument();
+    expect(screen.getByText(DOWNLOAD_CATALOG.items[0].label)).toBeInTheDocument();
+    expect(screen.getByText(HOME_EDITORIAL_CATALOG.downloads.primary_description)).toBeInTheDocument();
 
     await user.click(
       screen.getByRole('button', { name: new RegExp(HOME_EDITORIAL_CATALOG.downloads.accordion_title, 'i') })
@@ -90,5 +103,15 @@ describe('HomePage', () => {
 
     expect(screen.getByText(DOWNLOAD_CATALOG.items[1].label)).toBeInTheDocument();
     expect(screen.getByText(DOWNLOAD_CATALOG.items[2].label)).toBeInTheDocument();
+    expect(screen.queryByText(DOWNLOAD_CATALOG.items[0].label)).not.toBeInTheDocument();
+    expect(screen.queryByText(HOME_EDITORIAL_CATALOG.downloads.primary_description)).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: new RegExp(HOME_EDITORIAL_CATALOG.downloads.accordion_title, 'i') })
+    );
+
+    expect(screen.queryByText(DOWNLOAD_CATALOG.items[1].label)).not.toBeInTheDocument();
+    expect(screen.getByText(DOWNLOAD_CATALOG.items[0].label)).toBeInTheDocument();
+    expect(screen.getByText(HOME_EDITORIAL_CATALOG.downloads.primary_description)).toBeInTheDocument();
   });
 });

@@ -19,7 +19,7 @@ export function DatabaseSnapshotSection({
   onOpenDatabaseMetrics,
 }: DatabaseSnapshotSectionProps) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardContent className="space-y-6 px-6 py-6">
         <SectionHeader
           eyebrow={eyebrow}
@@ -42,13 +42,13 @@ export function DatabaseSnapshotSection({
           <p>{DATABASE_METRICS_CATALOG.schema_reference_label}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-4">
           {DATABASE_METRICS_CATALOG.core_metrics.map((metric) => (
             <MetricCard key={metric.id} label={metric.label} value={metric.value} />
           ))}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {DATABASE_METRICS_CATALOG.highlight_metrics.map((metric) => (
             <MetricCard
               key={metric.id}
