@@ -5,12 +5,12 @@ export type HomeBrowseViewId = Extract<
   'compounds' | 'compound-classes' | 'genes' | 'pathways' | 'toxicity' | 'guided-analysis'
 >;
 
-export type HomeHeroCtaId = 'terms-of-use' | 'how-to-cite';
+export type HomeHeroCtaId = 'launch-analysis' | 'how-to-cite' | 'terms-of-use';
 
 export interface HomeHeroCtaButton {
   id: HomeHeroCtaId;
   label: string;
-  variant: 'secondary' | 'warning' | 'success';
+  variant: 'default' | 'secondary' | 'warning' | 'success';
 }
 
 export interface HomeHeroModalContent {

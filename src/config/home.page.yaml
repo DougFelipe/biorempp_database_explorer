@@ -3,31 +3,35 @@ version: v1
 hero:
   title: BioRemPP Database Explorer
   subtitle: >
-    Open-access web service for integrated exploration of bioremediation potential
+    Open-access web service for integrated and reproducible exploration of bioremediation potential
     across genomic, metabolic, and toxicological data.
   description:
     - >
-      BioRemPP enables compound-centric analysis by linking KEGG Orthologs,
-      metabolic pathways, and toxicity endpoints to environmentally relevant
-      pollutants curated from regulatory frameworks.
+      BioRemPP is an open-access and reproducible web service for investigating
+      bioremediation potential across genomic, metabolic, and toxicological evidence.
     - >
-      The platform supports exploratory analysis, hypothesis generation, and
-      data-driven prioritization for environmental bioinformatics and
+      It provides a compound-centric analytical framework linking KEGG Orthologs,
+      metabolic pathways, toxicity endpoints, and curated datasets associated
+      with environmentally relevant pollutants.
+    - >
+      The platform supports cross-domain interpretation, hypothesis generation,
+      and data-driven prioritization for environmental bioinformatics and
       bioremediation research.
-  access_statement: >
-    This web service is free and open to all users and does not require login
-    or registration. It is not usable for commercial product claims without experimental confirmation
+  access_statement: Free and open access. No login or registration required.
   notice_lines:
-    - This web service is free and open to all users and does not require login.
-    - It is not usable for commercial product claims without experimental confirmation.
-    - See the license page for detailed terms of use.
+    - Analyses are based on curated datasets and are intended for exploratory use, hypothesis generation, and data-driven prioritization.
+    - BioRemPP outputs should not be interpreted as confirmatory, clinical, or causal evidence without external experimental validation.
+    - See the Terms of Use for access conditions, reuse guidance, and interpretative boundaries.
   cta_buttons:
-    - id: terms-of-use
-      label: Terms of Use
-      variant: warning
+    - id: launch-analysis
+      label: Launch Analysis
+      variant: default
     - id: how-to-cite
       label: How to Cite
       variant: success
+    - id: terms-of-use
+      label: Terms of Use
+      variant: warning
   modals:
     terms_of_use:
       title: Terms of Use

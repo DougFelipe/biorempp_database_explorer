@@ -28,8 +28,13 @@ const ALLOWED_BROWSE_VIEW_IDS = new Set<HomeBrowseViewId>([
   'guided-analysis',
 ]);
 
-const ALLOWED_HERO_CTA_IDS: HomeHeroCtaId[] = ['terms-of-use', 'how-to-cite'];
-const ALLOWED_HERO_CTA_VARIANTS = new Set<HomeHeroCtaButton['variant']>(['secondary', 'warning', 'success']);
+const ALLOWED_HERO_CTA_IDS: HomeHeroCtaId[] = ['launch-analysis', 'how-to-cite', 'terms-of-use'];
+const ALLOWED_HERO_CTA_VARIANTS = new Set<HomeHeroCtaButton['variant']>([
+  'default',
+  'secondary',
+  'warning',
+  'success',
+]);
 
 function assertNonEmptyString(value: unknown, path: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -128,16 +133,24 @@ function normalizeHero(rawHero: unknown): HomeHeroContent {
     seenCtaIds.add(button.id);
   });
 
-  ALLOWED_HERO_CTA_IDS.forEach((id) => {
+  ALLOWED_HERO_CTA_IDS.forEach((id, index) => {
     if (!seenCtaIds.has(id)) {
       throw new Error(`Invalid home config at hero.cta_buttons: missing required id "${id}"`);
     }
+    if (ctaButtons[index]?.id !== id) {
+      throw new Error(`Invalid home config at hero.cta_buttons: expected "${id}" at index ${index}`);
+    }
   });
+
+  const description = normalizeStringList(hero.description, 'hero.description');
+  if (description.length !== 3) {
+    throw new Error('Invalid home config at hero.description: expected exactly 3 paragraphs');
+  }
 
   return {
     title: assertNonEmptyString(hero.title, 'hero.title'),
     subtitle: assertNonEmptyString(hero.subtitle, 'hero.subtitle'),
-    description: normalizeStringList(hero.description, 'hero.description'),
+    description,
     access_statement: assertNonEmptyString(hero.access_statement, 'hero.access_statement'),
     notice_lines: normalizeStringList(hero.notice_lines, 'hero.notice_lines'),
     cta_buttons: ctaButtons,
